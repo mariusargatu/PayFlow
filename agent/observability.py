@@ -14,6 +14,7 @@ the guard.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import os
 from typing import Any, Callable
@@ -46,6 +47,24 @@ def setup() -> bool:
     return _setup_done
 
 
+def trace_run(name: str):
+    """Open a run level LangWatch trace so node spans nest inside it.
+
+    The per node ``trace_node`` spans and the ``score_run`` evaluation both need a
+    current trace; without one the SDK warns and nothing associates. The runner
+    wraps the whole graph execution in this. A clean ``nullcontext`` when tracing
+    is off, and a nullcontext on any SDK error, so the run is never affected.
+    """
+    if not setup():
+        return contextlib.nullcontext()
+    try:
+        import langwatch
+
+        return langwatch.trace(name=name)
+    except Exception:
+        return contextlib.nullcontext()
+
+
 def trace_node(name: str) -> Callable[[Callable], Callable]:
     """Wrap a graph node (state, deps) -> dict in a LangWatch span.
 
@@ -63,14 +82,81 @@ def trace_node(name: str) -> Callable[[Callable], Callable]:
             try:
                 import langwatch
 
-                with langwatch.span(name=name, type="chain"):
-                    return fn(state, deps)
+                from .roles import LABEL, role_of
+
+                role = role_of(name)
+                with langwatch.span(
+                    name=f"{name} [{role}]",
+                    type="chain",
+                    attributes={"payflow.role": role, "payflow.role_label": LABEL[role]},
+                ) as span:
+                    result = fn(state, deps)
+                    try:
+                        span.update(output=_summarize_node(result))
+                    except Exception:
+                        pass
+                    return result
             except Exception:
                 return fn(state, deps)
 
         return wrapper
 
     return decorate
+
+
+def _summarize_node(result: Any) -> str:
+    """A compact, human readable summary of what a node produced, for the span
+    output so a trace reads as a story (names, not full objects)."""
+    if not isinstance(result, dict):
+        return str(result)[:500]
+    lines: list[str] = []
+
+    def names(items, attr):
+        out = []
+        for it in items or []:
+            out.append(getattr(it, attr, None) or (it.get(attr) if isinstance(it, dict) else str(it)))
+        return out
+
+    if result.get("endpoints"):
+        lines.append("endpoints: " + ", ".join(names(result["endpoints"], "operation_id")))
+    if result.get("proposed_rules"):
+        lines.append("rules: " + ", ".join(names(result["proposed_rules"], "name")))
+    if result.get("proposed_invariants"):
+        lines.append("invariants: " + ", ".join(names(result["proposed_invariants"], "name")))
+    if result.get("proposed_relations"):
+        lines.append("relations: " + ", ".join(names(result["proposed_relations"], "name")))
+    if result.get("triaged_failures"):
+        verdicts = [
+            f"{getattr(v, 'failure_ref', '?')}={getattr(v, 'classification', '?')}"
+            for v in result["triaged_failures"]
+        ]
+        lines.append("verdicts: " + ", ".join(verdicts))
+    if result.get("history"):
+        lines.append("note: " + " | ".join(str(h) for h in result["history"]))
+    return "\n".join(lines)[:1500] or "(no proposals this step)"
+
+
+class _NoopSpan:
+    def update(self, **_kw: Any) -> None:
+        pass
+
+
+@contextlib.contextmanager
+def llm_span(name: str, model: str, system: str, user: str):
+    """Wrap one structured LLM proposal in a LangWatch ``llm`` span so the trace
+    shows the real prompt and the model's answer. Guarded: a no op span when
+    tracing is off or the SDK errors, so ``llm.py`` is unaffected either way."""
+    if not setup():
+        yield _NoopSpan()
+        return
+    try:
+        import langwatch
+
+        prompt = f"[system]\n{system}\n\n[user]\n{user}"
+        with langwatch.span(name=name, type="llm", model=model, input=prompt) as span:
+            yield span
+    except Exception:
+        yield _NoopSpan()
 
 
 def score_run(funnel: dict, cost: dict) -> None:
@@ -90,6 +176,19 @@ def score_run(funnel: dict, cost: dict) -> None:
             return
         proposed = max(funnel.get("proposed_total", 0), 1)
         survived = funnel.get("survived_falsification", 0)
+        try:
+            trace.update(
+                metadata={
+                    "model": cost.get("model", ""),
+                    "proposed_total": funnel.get("proposed_total", 0),
+                    "survived_falsification": survived,
+                    "flagged_real_bug": funnel.get("flagged_real_bug", []),
+                    "iterations_used": funnel.get("iterations_used", 0),
+                    "approx_cost_usd": cost.get("approx_cost_usd", 0.0),
+                }
+            )
+        except Exception:
+            pass
         trace.add_evaluation(
             name="proposals_survived_falsification",
             passed=funnel.get("final_failing_count", 0) == 0,

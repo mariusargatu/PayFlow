@@ -33,7 +33,7 @@ dev = [
 [project.scripts]
 demo = "tools.demo:main"
 agent-run = "agent.runner:main"
-trust-report = "tools.trust_report:main"
+build-report = "tools.trust_report:main"
 explain-run = "tools.explain_run:main"
 
 [tool.pytest.ini_options]

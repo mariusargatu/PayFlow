@@ -29,16 +29,23 @@ class LLMClient:
         self._llm = ChatOpenAI(model=config.model)
 
     def propose(self, schema: type[T], system: str, user: str) -> T:
+        from .observability import llm_span
+
         self._budget.before_call()
         structured = self._llm.with_structured_output(schema, include_raw=True)
-        result = structured.invoke(
-            [SystemMessage(content=system), HumanMessage(content=user)]
-        )
-        raw = result.get("raw")
-        usage = getattr(raw, "usage_metadata", None)
-        self._budget.record(usage)
-        parsed = result.get("parsed")
-        if parsed is None:
-            error = result.get("parsing_error")
-            raise RuntimeError(f"model returned no parsable structured output: {error}")
-        return parsed
+        with llm_span(schema.__name__, self._config.model, system, user) as span:
+            result = structured.invoke(
+                [SystemMessage(content=system), HumanMessage(content=user)]
+            )
+            raw = result.get("raw")
+            usage = getattr(raw, "usage_metadata", None)
+            self._budget.record(usage)
+            parsed = result.get("parsed")
+            if parsed is None:
+                error = result.get("parsing_error")
+                raise RuntimeError(f"model returned no parsable structured output: {error}")
+            try:
+                span.update(output=parsed.model_dump())
+            except Exception:
+                pass
+            return parsed

@@ -230,17 +230,20 @@ class AgentState(TypedDict):
 
 ### 7.3 Graph nodes
 
-| Node | Responsibility | Fan out? |
-|---|---|---|
-| `ingest_spec` | Fetch/parse the OpenAPI spec; optionally probe the live PayFlow instance | No |
-| `infer_endpoint_rules` | Per endpoint: propose `@rule()` candidates: transitions, preconditions, `Bundle` usage | **Yes**, one `Send` task per endpoint |
-| `infer_invariants` | Propose system wide `@invariant()` candidates from the merged rule set | No (runs after fan in) |
-| `infer_relations` | Propose metamorphic relations: transform functions + expected relations | No |
-| `compile_spec` | Deterministically render the proposals into an executable `RuleBasedStateMachine` module plus MR style Hypothesis tests | No |
-| `execute` | Run the compiled spec via pytest/Hypothesis against PayFlow; capture shrunk counterexamples | No |
-| `triage` | Classify each failure: real bug / bad rule / bad invariant / bad relation | No |
-| `refine` | Rewrite the offending rule/invariant/relation per the triage verdict; increments `iteration` | No, loops to `compile_spec` |
-| `report` | Emit the bug report, the current spec, and the LangWatch summary | Terminal |
+The **Role** column makes the propose/dispose split (7.1) explicit and is the
+declared truth in `agent/roles.py`, gated by `tests/drift/test_node_roles.py`.
+
+| Node | Role | Responsibility | Fan out? |
+|---|---|---|---|
+| `ingest_spec` | dispose | Fetch/parse the OpenAPI spec; optionally probe the live PayFlow instance | No |
+| `infer_endpoint_rules` | propose | Per endpoint: propose `@rule()` candidates: transitions, preconditions, `Bundle` usage | **Yes**, one `Send` task per endpoint |
+| `infer_invariants` | propose | Propose system wide `@invariant()` candidates from the merged rule set | No (runs after fan in) |
+| `infer_relations` | propose | Propose metamorphic relations: transform functions + expected relations | No |
+| `compile_spec` | dispose | Deterministically render the proposals into an executable `RuleBasedStateMachine` module plus MR style Hypothesis tests | No |
+| `execute` | dispose | Run the compiled spec via pytest/Hypothesis against PayFlow; capture shrunk counterexamples | No |
+| `triage` | propose | Classify each failure: real bug / bad rule / bad invariant / bad relation | No |
+| `refine` | propose | Rewrite the offending rule/invariant/relation per the triage verdict; increments `iteration` | No, loops to `compile_spec` |
+| `report` | dispose | Emit the bug report, the current spec, and the LangWatch summary | Terminal |
 
 ### 7.4 Control flow
 

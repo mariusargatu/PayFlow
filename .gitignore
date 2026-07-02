@@ -20,3 +20,4 @@ agent_runs/
 .DS_Store
 langwatch/.env
 .playwright-mcp/
+.import_linter_cache/

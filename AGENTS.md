@@ -34,7 +34,7 @@ uv run python tools/triage_validation.py  # Run B: triage vs an in process broke
 uv run python tools/mr_validation.py      # flagship: a fee misroute only MR-1 catches (invariant suite green, MR red, triage real_bug); costs a few tokens
 
 # Phase 4 (works now):
-uv run trust-report                        # render site/trust-report.html from real artifacts (gates, funnel, mutation, agent graph)
+uv run build-report                        # fold the report (gates, funnel, plain English decomposition, mutation, role coloured pipeline graph) into site/index.html between its markers. One page; no standalone file. Regenerate after new runs.
 uv run python -m mutmut run                # Layer 3 mutation run over the payment core (in process replay of the agent specs); minutes, no tokens
 uv run python mutation/run_baseline.py     # recompute mutation/baseline.json (headline + full suite kill rates); nightly recomputes
 actionlint .github/workflows/*.yml         # validate CI config (if actionlint installed)
@@ -50,7 +50,7 @@ uv run python tools/judge_comparison.py    # empirically rank triage judge model
 
 ## Repository layout
 
-Target layout is design.md §13, and it is all present today: `specs/`, `docs/` (design and adr), `.claude/`, this file, plus `payflow/` (`api/` → `domain/` → `infrastructure/`, agent implemented), `agent/` (the LangGraph property generation agent), `generated_specs/`, `tests/{property,concurrency,drift,agent_scenarios,agent_metamorphic}/`, `mutation/`, `site/` (the trust report), and `.github/workflows/`. A local build log and planning notes also exist for the maintainer but are not part of the published repo.
+Target layout is design.md §13, and it is all present today: `specs/`, `docs/` (design and adr), `.claude/`, this file, plus `payflow/` (`api/` → `domain/` → `infrastructure/`, agent implemented), `agent/` (the LangGraph property generation agent), `generated_specs/`, `tests/{property,concurrency,drift,agent_scenarios,agent_metamorphic}/`, `mutation/`, `site/` (the single page `index.html` walkthrough with the trust report folded in, published to GitHub Pages by `.github/workflows/pages.yml`), and `.github/workflows/`. A local build log and planning notes also exist for the maintainer but are not part of the published repo.
 
 ## The four layer gate
 

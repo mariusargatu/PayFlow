@@ -60,6 +60,17 @@ _DIM = "grey58"
 
 _GLYPH = {"done": ("✓", _OK), "active": ("◉", f"bold {_ACCENT}"), "pending": ("○", _DIM)}
 
+# Role colours (the propose/dispose split, design section 7.1 / agent/roles.py):
+# the node name is tinted by role while the glyph stays coloured by run state, so
+# both dimensions read at once. propose = amber (LLM, fallible), dispose = teal
+# (deterministic, trustworthy).
+_ROLE_COLOR = {"propose": "#d29922", "dispose": "#3fb6c9"}
+
+try:  # the map lives with the agent; the view degrades gracefully without it
+    from agent.roles import NODE_ROLES as _NODE_ROLES
+except Exception:  # pragma: no cover
+    _NODE_ROLES = {}
+
 _LAYOUT: list[list[tuple]] = [
     [("node", "ingest_spec", "ingest")],
     [("raw", "   │")],
@@ -103,8 +114,11 @@ def _graph_text(states: dict[str, str], endpoints: list[str], iterations: int) -
                 t.append(seg[1], style=_DIM)
             elif seg[0] == "node":
                 _, key, display = seg
-                glyph, style = _GLYPH[states.get(key, "pending")]
-                t.append(f"{glyph} {display}", style=style)
+                glyph, gstyle = _GLYPH[states.get(key, "pending")]
+                rstyle = _ROLE_COLOR.get(_NODE_ROLES.get(key, "dispose"), _DIM)
+                # glyph carries run state, node name carries propose/dispose role
+                t.append(f"{glyph} ", style=gstyle)
+                t.append(display, style=rstyle)
             elif seg[0] == "endpoints":
                 if endpoints:
                     short = [e.replace("PaymentIntent", "").replace("Payment", "") for e in endpoints]
@@ -155,15 +169,26 @@ def _proposals_panel(rules: list, invariants: list, relations: list) -> Panel | 
         v = p.get("fee_handling", "") if isinstance(p, dict) else getattr(p, "fee_handling", "")
         return f" ({v})" if v else ""
 
+    from labels import PROPERTY_LABELS
+
     t = Table.grid(padding=(0, 2))
     t.add_column(style="bold", justify="right")
     t.add_column(overflow="fold")
+
+    def header(kind: str) -> Text:
+        name, gloss, _ = PROPERTY_LABELS[kind]
+        h = Text(name, style="bold")
+        h.append(f"\n{gloss}", style=_DIM)
+        return h
+
+    # Human label in the header, the actual proposed names as the content, so a
+    # reader sees what each category means and can compare what a run proposed.
     if rules:
-        t.add_row("rules", Text(", ".join(name_of(r) for r in rules), style=_DIM))
+        t.add_row(header("rules"), Text(", ".join(name_of(r) for r in rules), style=_DIM))
     if invariants:
-        t.add_row("invariants", Text(", ".join(f"{id_of(i)} {name_of(i)}".strip() for i in invariants), style=_OK))
+        t.add_row(header("invariants"), Text(", ".join(f"{id_of(i)} {name_of(i)}".strip() for i in invariants), style=_OK))
     if relations:
-        t.add_row("relations", Text(", ".join(f"{id_of(r)} {name_of(r)}{fee_of(r)}".strip() for r in relations), style=_ACCENT))
+        t.add_row(header("relations"), Text(", ".join(f"{id_of(r)} {name_of(r)}{fee_of(r)}".strip() for r in relations), style=_ACCENT))
     return Panel(t, title="proposed properties", border_style=_DIM, padding=(0, 1))
 
 
@@ -186,7 +211,10 @@ def _stats(funnel: dict, cost: dict) -> Table:
     t = Table.grid(padding=(0, 3))
     t.add_column(style="bold", justify="right")
     t.add_column()
-    t.add_row("proposed", Text(f"{total}  ({rules}r {inv}i {rel}m)", style=_ACCENT))
+    from labels import counts_phrase
+
+    t.add_row("proposed", Text(f"{total}", style=_ACCENT))
+    t.add_row("", Text(counts_phrase(rules, inv, rel), style=_DIM))
     t.add_row("survived", bar)
     if real:
         t.add_row("real bugs", Text(", ".join(real), style=_BAD))
@@ -222,11 +250,22 @@ def _triage_panel(verdicts: list[dict]) -> Panel | None:
     return Panel(t, title="triage verdicts", border_style=_DIM, padding=(0, 1))
 
 
+def _role_legend() -> Text:
+    t = Text()
+    t.append("  ● ", style=_ROLE_COLOR["propose"])
+    t.append("LLM proposes (fallible)", style=_DIM)
+    t.append("      ● ", style=_ROLE_COLOR["dispose"])
+    t.append("deterministic disposes (trustworthy)", style=_DIM)
+    t.append("      glyph = run state", style=_DIM)
+    return t
+
+
 def _compose(states, endpoints, funnel, cost, verdicts, proposals, now, aborted) -> Group:
     title = Text("PayFlow agent run", style=f"bold {_ACCENT}")
     if aborted:
         title.append(f"   ABORTED: {aborted}", style=_BAD)
-    parts = [title, Panel(_graph_text(states, endpoints, funnel.get("iterations_used", 0)),
+    parts = [title, Panel(Group(_graph_text(states, endpoints, funnel.get("iterations_used", 0)),
+                                _role_legend()),
                           title="pipeline", border_style=_DIM, padding=(1, 2))]
     if now is not None:
         parts.append(now)

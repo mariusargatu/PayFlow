@@ -126,10 +126,15 @@ def run_agent(offline: bool, bug: str | None = None, run_dir: str | None = None,
                 "history": [],
             }
             try:
-                if view:
-                    _invoke_with_view(app, initial, thread, deps, run_dir)
-                else:
-                    app.invoke(initial, thread)
+                # A run level trace so every node span and the report node's run
+                # score nest inside one LangWatch trace (no op when tracing is off).
+                from .observability import trace_run
+
+                with trace_run("agent-run"):
+                    if view:
+                        _invoke_with_view(app, initial, thread, deps, run_dir)
+                    else:
+                        app.invoke(initial, thread)
             except BudgetExceeded as exc:
                 snapshot = dict(app.get_state(thread).values)
                 snapshot["aborted"] = True
