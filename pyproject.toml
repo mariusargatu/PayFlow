@@ -1,0 +1,122 @@
+[project]
+name = "payflow"
+version = "0.1.0"
+description = "Payment-intent processor backed by a double-entry ledger"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pydantic>=2.6",
+    "langgraph>=0.2.60",
+    "langchain-openai>=0.2",
+    "python-dotenv>=1.0",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+# LangWatch tracing (ADR-0002, design §9). Optional so the PR/CI lane stays
+# keyless and light; the instrumentation in agent/observability.py is a clean no
+# op when this is not installed. Install for local tracing: uv sync --extra observability
+observability = [
+    "langwatch>=0.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "import-linter>=2.0",
+    "hypothesis>=6.100",
+    "mutmut>=3.6.0",
+]
+
+[project.scripts]
+demo = "tools.demo:main"
+agent-run = "agent.runner:main"
+trust-report = "tools.trust_report:main"
+explain-run = "tools.explain_run:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["tests", "."]
+testpaths = ["tests"]
+# Layer 2 (design §6.3) makes real triage LLM calls, so it is opt-in: the default
+# run and the keyless PR/CI lane exclude it via this marker. Run it explicitly
+# with `uv run pytest -m layer2` (needs OPENAI_API_KEY; skips honestly without).
+# A CLI `-m layer2` overrides this default `-m` expression (last one wins).
+addopts = "-m 'not layer2'"
+markers = [
+    "layer2: agent-judgment tests (triage verdict stability + accuracy); real LLM calls, key-gated",
+]
+
+# Layer 3 mutation ground truth (design §11.1). ADR-0001 fixed the scope at
+# payflow/domain + the ledger core; ADR-0003 narrows it, within that boundary, to
+# the payment DECISION logic (design §11.1 says "core logic"): orchestration, the
+# state machine, fee math, idempotency, and the atomic ledger write. The pure data
+# holders (models), port protocols, the SQLite persistence adapters
+# (repositories), and the composition root (factory) are excluded: they carry no
+# branching payment logic, so their mutants are representation noise a black box
+# property suite cannot and should not distinguish. This also keeps a full sweep
+# under the runtime cap (see ADR-0003 and mutation/README.md). The whole payflow
+# package is still copied so imports resolve; only_mutate restricts what mutates.
+# Test selection is the committed agent discovered replay run in process
+# (mutation/replay/): the README headline is kill rate with zero hand written
+# tests. The secondary full number adds the Phase 1 sanity machine via
+# PAYFLOW_MUT_FULL; see mutation/run_baseline.py.
+[tool.mutmut]
+source_paths = ["payflow"]
+only_mutate = [
+    "payflow/domain/service.py",
+    "payflow/domain/state_machine.py",
+    "payflow/domain/fees.py",
+    "payflow/domain/idempotency.py",
+    "payflow/infrastructure/ledger/core.py",
+]
+also_copy = ["generated_specs/", "mutation/replay/"]
+pytest_add_cli_args_test_selection = ["mutation/replay/"]
+# The replay skips Hypothesis shrinking, so a real failure fails fast; keep the
+# per mutant CPU budget tight so a genuinely looping mutant is capped quickly
+# rather than burning a worker for minutes.
+timeout_multiplier = 6.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["payflow", "tools", "agent"]
+
+# Layer 0 contracts (spec §7, design §6.1). The canonical location would be a
+# root `.importlinter` file, but that path is permission-denied in this
+# environment; import-linter reads this table as an equivalent config source.
+[tool.importlinter]
+root_package = "payflow"
+
+[[tool.importlinter.contracts]]
+name = "Layered architecture: api -> domain -> infrastructure"
+type = "layers"
+layers = [
+    "payflow.api",
+    "payflow.domain",
+    "payflow.infrastructure",
+]
+
+[[tool.importlinter.contracts]]
+name = "API must never import infrastructure directly"
+type = "forbidden"
+source_modules = ["payflow.api"]
+forbidden_modules = ["payflow.infrastructure"]
+allow_indirect_imports = "true"
+
+[[tool.importlinter.contracts]]
+name = "Only ledger.core may touch the ledger tables"
+type = "forbidden"
+source_modules = [
+    "payflow.api",
+    "payflow.domain",
+    "payflow.infrastructure.db",
+    "payflow.infrastructure.accounts",
+    "payflow.infrastructure.intents",
+    "payflow.infrastructure.idempotency",
+]
+forbidden_modules = ["payflow.infrastructure.ledger.tables"]
+allow_indirect_imports = "true"

@@ -1,0 +1,46 @@
+name: verify
+
+# The PR/commit gate (design §10): Layer 0 plus the Layer 1 replay slice, all
+# keyless and deterministic, targeting under three minutes. This is replay, not
+# discovery: it checks PayFlow against the already accepted agent authored spec,
+# it never re-runs the property generation agent (that is the nightly lane, which
+# needs an API budget). No secrets are referenced here by design.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies (keyless)
+        run: uv sync
+
+      - name: Layer 0 - import contracts
+        run: uv run lint-imports
+
+      - name: Drift gates - diagrams and contracts cannot lie
+        run: uv run pytest tests/drift -q
+
+      - name: Layer 1 - property sanity machine + concurrency A
+        run: >-
+          uv run pytest tests/property
+          "tests/concurrency/test_idempotent_replay.py::test_replay_correct_build_single_effect"
+          -q
+
+      - name: Layer 1 - agent discovered specs replay (in process, offline)
+        run: uv run pytest mutation/replay/test_agent_replay.py -q

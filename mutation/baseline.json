@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-07-02T15:37:11Z",
+  "tool": "mutmut 3.6.0",
+  "scope": [
+    "payflow/domain",
+    "payflow/infrastructure/ledger/core.py"
+  ],
+  "hypothesis_budget": {
+    "spec_max_examples": 25,
+    "spec_step_count": 14,
+    "mr_max_examples": 10
+  },
+  "runs": {
+    "headline": {
+      "label": "headline",
+      "killed": 383,
+      "timeout_detected": 0,
+      "detected": 383,
+      "survived": 144,
+      "no_tests": 44,
+      "suspicious": 0,
+      "skipped": 0,
+      "total": 571,
+      "covered": 527,
+      "kill_rate": 0.7268,
+      "kill_rate_pct": 72.7,
+      "runtime_seconds": 338.7
+    },
+    "full": {
+      "label": "full",
+      "killed": 383,
+      "timeout_detected": 2,
+      "detected": 385,
+      "survived": 142,
+      "no_tests": 44,
+      "suspicious": 0,
+      "skipped": 0,
+      "total": 571,
+      "covered": 527,
+      "kill_rate": 0.7306,
+      "kill_rate_pct": 73.1,
+      "runtime_seconds": 508.1
+    }
+  }
+}

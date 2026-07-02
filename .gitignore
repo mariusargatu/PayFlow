@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.db
+*.db-wal
+*.db-shm
+.pytest_cache/
+.env
+.hypothesis/
+mutants/
+.mutmut-cache
+
+# private: process artifacts, kept local only
+.claude/
+.planning/
+.hypothesis/
+docs/journey/
+docs/retrospectives/
+agent_runs/
+.DS_Store
+langwatch/.env
+.playwright-mcp/

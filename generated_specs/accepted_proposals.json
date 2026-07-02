@@ -1,0 +1,138 @@
+{
+  "_note": "Deterministic triage evidence: the accepted, committed Layer 1 slice. Extracted from the source_run report. MUST be regenerated whenever the committed generated_specs/ slice changes under the same acceptance decision, via tools/judge_comparison.py --dump-accepted <report.json> (or by hand). agent.annotations diffs failing proposals against this file to annotate triage; it is evidence, never a verdict.",
+  "source_run": "agent_runs/20260702T151850Z",
+  "model": "gpt-5.4-nano",
+  "rules": [
+    {
+      "operation_id": "authorizePaymentIntent",
+      "name": "authorize",
+      "effect": "authorize",
+      "legal_states": [
+        "CREATED"
+      ],
+      "success_status": 200,
+      "amount_field": null
+    },
+    {
+      "operation_id": "capturePaymentIntent",
+      "name": "capture",
+      "effect": "capture",
+      "legal_states": [
+        "AUTHORIZED",
+        "PARTIALLY_CAPTURED"
+      ],
+      "success_status": 200,
+      "amount_field": null
+    },
+    {
+      "operation_id": "createAccount",
+      "name": "create_account",
+      "effect": "none",
+      "legal_states": [],
+      "success_status": 201,
+      "amount_field": null
+    },
+    {
+      "operation_id": "createPaymentIntent",
+      "name": "create_intent_created",
+      "effect": "none",
+      "legal_states": [],
+      "success_status": 201,
+      "amount_field": "amount"
+    },
+    {
+      "operation_id": "getAccountBalance",
+      "name": "get_account_balance",
+      "effect": "none",
+      "legal_states": [],
+      "success_status": 200,
+      "amount_field": null
+    },
+    {
+      "operation_id": "getPaymentIntent",
+      "name": "get_payment_intent",
+      "effect": "none",
+      "legal_states": [],
+      "success_status": 200,
+      "amount_field": null
+    },
+    {
+      "operation_id": "refundPaymentIntent",
+      "name": "refund",
+      "effect": "refund",
+      "legal_states": [
+        "CAPTURED",
+        "PARTIALLY_REFUNDED"
+      ],
+      "success_status": 200,
+      "amount_field": null
+    },
+    {
+      "operation_id": "voidPaymentIntent",
+      "name": "void",
+      "effect": "void",
+      "legal_states": [
+        "AUTHORIZED",
+        "CREATED",
+        "PARTIALLY_CAPTURED"
+      ],
+      "success_status": 200,
+      "amount_field": null
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-1",
+      "name": "captured_le_authorized",
+      "kind": "captured_le_authorized"
+    },
+    {
+      "id": "INV-2",
+      "name": "refunded_le_captured",
+      "kind": "refunded_le_captured"
+    },
+    {
+      "id": "INV-3",
+      "name": "nonneg_balance",
+      "kind": "nonneg_balance"
+    }
+  ],
+  "relations": [
+    {
+      "id": "MR-1",
+      "name": "mr_split_capture_fee_adjusted",
+      "transform": "split_capture",
+      "fee_handling": "fee_adjusted"
+    },
+    {
+      "id": "MR-2",
+      "name": "mr_reorder_independent_exact_equivalence",
+      "transform": "reorder_independent",
+      "fee_handling": "exact_equivalence"
+    },
+    {
+      "id": "MR-3",
+      "name": "mr_scale_amounts_exact_equivalence",
+      "transform": "scale_amounts",
+      "fee_handling": "exact_equivalence"
+    },
+    {
+      "id": "MR-4",
+      "name": "mr_replay_request_exact_equivalence",
+      "transform": "replay_request",
+      "fee_handling": "exact_equivalence"
+    },
+    {
+      "id": "MR-5",
+      "name": "mr_void_recreate_fee_adjusted",
+      "transform": "void_recreate",
+      "fee_handling": "fee_adjusted"
+    },
+    {
+      "id": "MR-6",
+      "name": "mr_split_refund_fee_adjusted",
+      "transform": "split_refund",
+      "fee_handling": "exact_equivalence"
+    }
+  ]
+}

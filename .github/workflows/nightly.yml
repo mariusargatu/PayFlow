@@ -1,0 +1,64 @@
+name: nightly
+
+# The deeper lane (design §10): full agent re-discovery, the mutation baseline,
+# and the trust report. Manual workflow_dispatch ONLY, not a cron: a public
+# public repo scheduling paid agent runs it cannot fund is theatre. It flips
+# to a schedule once an LLM budget lands in CI secrets. Discovery needs the
+# OPENAI_API_KEY secret and skips honestly when it is absent; the mutation
+# baseline and trust report are keyless and always run.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Layer 1 - full agent discovery (needs OPENAI_API_KEY)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "OPENAI_API_KEY is not set - skipping the paid discovery run."
+            echo "This lane stays manual until an LLM budget lands in CI secrets (design §10)."
+            exit 0
+          fi
+          uv run agent-run
+
+      - name: Layer 2 - agent judgment (needs OPENAI_API_KEY)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "OPENAI_API_KEY is not set - skipping the Layer 2 triage-judgment suite."
+            echo "AGENT-MR verdict stability + rigged-world scenarios need the key (design §6.3)."
+            exit 0
+          fi
+          uv run pytest -m layer2 tests/agent_metamorphic tests/agent_scenarios -q
+
+      - name: Layer 3 - mutation baseline (keyless)
+        run: uv run python mutation/run_baseline.py
+
+      - name: Trust report (keyless)
+        run: uv run trust-report
+
+      - name: Upload trust report and mutation baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: trust-report
+          path: |
+            site/trust-report.html
+            mutation/baseline.json
+            mutation/survivors.txt
+          if-no-files-found: warn

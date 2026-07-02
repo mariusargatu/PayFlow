@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	ingest_spec(ingest_spec)
+	infer_endpoint_rules(infer_endpoint_rules)
+	infer_invariants(infer_invariants)
+	infer_relations(infer_relations)
+	compile_spec(compile_spec)
+	execute(execute)
+	triage(triage)
+	refine(refine)
+	report(report)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> ingest_spec;
+	compile_spec --> execute;
+	execute -.-> report;
+	execute -.-> triage;
+	infer_endpoint_rules --> infer_invariants;
+	infer_invariants --> infer_relations;
+	infer_relations --> compile_spec;
+	ingest_spec -.-> infer_endpoint_rules;
+	refine --> compile_spec;
+	triage -.-> refine;
+	triage -.-> report;
+	report --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

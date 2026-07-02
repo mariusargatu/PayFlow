@@ -1,0 +1,32 @@
+[tool.importlinter]
+root_package = "payflow"
+
+[[tool.importlinter.contracts]]
+name = "Layered architecture: api -> domain -> infrastructure"
+type = "layers"
+layers = [
+    "payflow.api",
+    "payflow.domain",
+    "payflow.infrastructure",
+]
+
+[[tool.importlinter.contracts]]
+name = "API must never import infrastructure directly"
+type = "forbidden"
+source_modules = ["payflow.api"]
+forbidden_modules = ["payflow.infrastructure"]
+allow_indirect_imports = "true"
+
+[[tool.importlinter.contracts]]
+name = "Only ledger.core may touch the ledger tables"
+type = "forbidden"
+source_modules = [
+    "payflow.api",
+    "payflow.domain",
+    "payflow.infrastructure.db",
+    "payflow.infrastructure.accounts",
+    "payflow.infrastructure.intents",
+    "payflow.infrastructure.idempotency",
+]
+forbidden_modules = ["payflow.infrastructure.ledger.tables"]
+allow_indirect_imports = "true"
