@@ -27,6 +27,8 @@ from tools.demo import GATES, _run
 
 _ROOT = Path(__file__).resolve().parents[1]
 _BASELINE = _ROOT / "mutation" / "baseline.json"
+_SEMANTIC = _ROOT / "mutation" / "semantic_report.json"
+_SPEC_COVERAGE = _ROOT / "mutation" / "spec_coverage.json"
 _GRAPH_MMD = _ROOT / "agent" / "graph.mmd"
 _AGENT_RUNS = _ROOT / "agent_runs"
 
@@ -156,18 +158,11 @@ def _stacked_bar(killed: int, survived: int, no_tests: int) -> str:
 
 
 def _metrics(baseline: dict | None, all_ok: bool, funnel: list[dict]) -> str:
-    headline = (baseline or {}).get("runs", {}).get("headline")
-    # Distinct headline metrics only: the kill rate lives here once (its full
-    # breakdown is the mutation section, not repeated here), plus three numbers
-    # that appear nowhere else in the header.
+    # The kill rate is shown once only, in the mutation section (its colored
+    # breakdown), so it is deliberately NOT repeated here. These three numbers
+    # appear nowhere else in the report.
     bugs_caught = len({ref for r in funnel for ref in r.get("flagged", [])})
     cells = []
-    if headline:
-        cells.append(
-            f'<div class="metric"><div class="n"><span class="amber">'
-            f'{headline["kill_rate_pct"]}%</span></div>'
-            '<div class="l">mutation kill rate, zero hand written tests</div></div>'
-        )
     cells.append(
         f'<div class="metric"><div class="n" style="color:{_GREEN if all_ok else _RED}">'
         f'{"PASS" if all_ok else "FAIL"}</div>'
@@ -574,6 +569,136 @@ def _report_extra_css() -> str:
 """
 
 
+def _semantic_section() -> str:
+    """The semantic mutation explorer (ADR-0007): informational, adversary
+    dependent, deliberately separated from the gated mutmut number above."""
+    if not _SEMANTIC.exists():
+        return ""
+    try:
+        data = json.loads(_SEMANTIC.read_text())
+    except json.JSONDecodeError:
+        return ""
+    source = str(data.get("source", "?"))
+    if source.startswith("skipped"):
+        return (
+            '<section id="semantic" class="rule"><p class="kicker">Semantic mutation &middot; informational</p>'
+            "<h2>Realistic bugs the suite misses, from an independent adversary.</h2>"
+            '<p class="lead">This is <b>not a gate</b> and is separate from the kill rate above. '
+            "Semantic exploration did not run this cycle: the cross family adversary key or extra "
+            "was absent, so no mutants were generated. The gated mutmut number above is unaffected.</p>"
+            "</section>"
+        )
+    s = data.get("summary", {})
+    parts = [f'killed {s.get("killed", 0)}', f'survived {s.get("survived", 0)}']
+    if s.get("timeout"):
+        parts.append(f'timeout {s.get("timeout")}')
+    parts.append(f'of {s.get("total", 0)}')
+    stat = (
+        f'<p class="lead mono" style="font-size:13px;color:var(--ink-3)">run: '
+        f'{html.escape(source)} &middot; {" &middot; ".join(parts)} &middot; '
+        f'{html.escape(str(data.get("generated_at", "")))}</p>'
+    )
+    coverage = _coverage_block()
+    body = coverage if coverage else _survivor_cards(data.get("mutants", []))
+    return (
+        '<section id="semantic" class="rule"><p class="kicker">Semantic exploration &middot; informational</p>'
+        "<h2>Realistic bugs the suite misses, mapped to the frozen spec.</h2>"
+        '<p class="lead">This is <b>not a gate</b> and is separate from the kill rate above. A cross '
+        "family LLM adversary injects realistic bugs mutmut's syntactic operators cannot express; each "
+        'survivor is then confirmed by hand against <span class="mono">specs/</span> (ADR-0007: the spec '
+        "is the referee). A survivor is a <b>candidate gap for a human</b>, not a proven bug. The number "
+        "is adversary dependent, so a strong score is never mistaken for the gated one.</p>"
+        + stat
+        + body
+        + "</section>"
+    )
+
+
+def _survivor_cards(mutants: list[dict]) -> str:
+    """Fallback list of survivors when no human coverage adjudication exists yet."""
+    survivors = [m for m in mutants if m.get("status") == "survived"]
+    if not survivors:
+        return '<p class="lead">No survivors in the latest run.</p>'
+
+    def _screen(m: dict) -> str:
+        verdict = (m.get("equivalent") or {}).get("verdict")
+        if not verdict:
+            return ""
+        label = {"equivalent": "likely equivalent", "real": "likely a real gap",
+                 "unsure": "judge unsure"}.get(verdict, verdict)
+        return (f'<div class="mono" style="color:var(--ink-3);font-size:11.5px;margin-top:3px">'
+                f'screened: {html.escape(label)}</div>')
+
+    cards = "".join(
+        '<div style="border-left:3px solid var(--amber);padding:4px 0 4px 14px;margin:10px 0">'
+        f'<div class="mono" style="color:var(--amber);font-weight:600">{html.escape(m.get("id", ""))}</div>'
+        f'<div style="color:var(--ink-2);font-size:13px;margin-top:2px">{html.escape(m.get("desc", ""))}</div>'
+        f'<div class="mono" style="color:var(--ink-3);font-size:11.5px;margin-top:3px">should be caught by: '
+        f'{html.escape(m.get("expect", "?"))}</div>' + _screen(m) + "</div>"
+        for m in survivors
+    )
+    return f'<h3 style="font-size:15px;margin:22px 0 4px">Candidate gaps (survivors)</h3>{cards}'
+
+
+_COVERAGE_COLOR = {
+    "full": "var(--green)", "narrowed": "var(--amber)", "partial": "var(--amber)",
+    "reachability": "var(--amber)", "absent": "var(--red)",
+}
+
+
+def _coverage_pill(coverage: str) -> str:
+    color = _COVERAGE_COLOR.get(coverage, "var(--ink-3)")
+    return (
+        f'<span class="mono" style="color:{color};font-size:11px;border:1px solid {color};'
+        f'border-radius:10px;padding:1px 8px;white-space:nowrap">{html.escape(coverage)}</span>'
+    )
+
+
+def _coverage_table(rows: list[dict]) -> str:
+    body = "".join(
+        "<tr>"
+        f'<td class="mono" style="color:var(--ink);white-space:nowrap">{html.escape(r.get("id", ""))}</td>'
+        f'<td>{html.escape(r.get("text", ""))}</td>'
+        f'<td>{_coverage_pill(str(r.get("coverage", "")))}</td>'
+        f'<td style="color:var(--ink-3);font-size:12px">{html.escape(r.get("note", ""))}</td>'
+        "</tr>"
+        for r in rows
+    )
+    return (
+        '<div class="tbl" style="margin-top:14px"><table style="width:100%;border-collapse:collapse">'
+        "<thead><tr><th>id</th><th>frozen requirement</th><th>coverage</th><th>note</th></tr></thead>"
+        f"<tbody>{body}</tbody></table></div>"
+    )
+
+
+def _coverage_block() -> str:
+    """The human confirmed coverage of the FROZEN spec by the discovered suite (ADR-0007
+    decision 5), rendered inside the semantic section as one compact table. This is the
+    adjudication of the survivors, so it replaces the raw survivor list rather than
+    repeating it. Returns "" when no adjudication file exists (then the survivor cards
+    show instead). Never gates."""
+    if not _SPEC_COVERAGE.exists():
+        return ""
+    try:
+        data = json.loads(_SPEC_COVERAGE.read_text())
+    except json.JSONDecodeError:
+        return ""
+    rows = data.get("invariants", []) + data.get("boundary_rules", [])
+    if not rows:
+        return ""
+    full = sum(1 for r in rows if r.get("coverage") == "full")
+    weak = sum(1 for r in rows if r.get("coverage") in ("narrowed", "partial", "reachability"))
+    missing = sum(1 for r in rows if r.get("coverage") == "absent")
+    return (
+        '<h3 style="font-size:15px;margin:22px 0 4px">Frozen spec coverage '
+        '<span class="mono" style="color:var(--ink-3);font-weight:400;font-size:12px">'
+        '(survivors confirmed against specs/)</span></h3>'
+        f'<p class="lead" style="margin:4px 0 0"><b>{full} full &middot; {weak} weak or unreached '
+        f'&middot; {missing} absent</b> of {len(rows)} frozen rules: where a human pushes discovery next.</p>'
+        + _coverage_table(rows)
+    )
+
+
 def _inner_sections() -> str:
     """The report body (no page chrome), for injection into index.html."""
     rows, all_ok = _gate_rows()
@@ -589,6 +714,7 @@ def _inner_sections() -> str:
         + "</section>"
         + _funnel_section(funnel)
         + _mutation_section(baseline)
+        + _semantic_section()
         + _pipeline_section(rows, all_ok)
     )
 

@@ -46,8 +46,8 @@ from .state import AgentState
 class AgentDeps:
     config: AgentConfig
     budget: CostGuard
+    # None only for the structural graph build (drift gate); a real run always sets it.
     llm: LLMClient | None
-    offline: bool
     generated_spec_path: str = "generated_specs/payflow_spec.py"
     generated_mr_path: str = "generated_specs/payflow_mr.py"
     # None -> agent.annotations resolves the default committed slice location.
@@ -61,7 +61,7 @@ class AgentDeps:
 def _structural_deps() -> AgentDeps:
     """Minimal deps for building the graph shape only (drift gate, no LLM)."""
     config = AgentConfig()
-    return AgentDeps(config=config, budget=CostGuard(), llm=None, offline=True)
+    return AgentDeps(config=config, budget=CostGuard(), llm=None)
 
 
 def _dispatch_endpoints(state: AgentState) -> list[Send]:

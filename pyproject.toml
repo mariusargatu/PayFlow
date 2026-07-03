@@ -20,6 +20,13 @@ dependencies = [
 observability = [
     "langwatch>=0.1",
 ]
+# Cross family adversary for the semantic mutation explorer (ADR-0007, revised). The
+# explorer's sole mutant source is now this Anthropic adversary; kept optional so the
+# default/CI lane stays keyless (the explorer skips honestly without it). Install for a
+# real run: uv sync --extra adversary
+adversary = [
+    "anthropic>=0.39",
+]
 
 [dependency-groups]
 dev = [
@@ -32,9 +39,11 @@ dev = [
 
 [project.scripts]
 demo = "tools.demo:main"
+full = "tools.full:main"
 agent-run = "agent.runner:main"
 build-report = "tools.trust_report:main"
 explain-run = "tools.explain_run:main"
+semantic-mutation = "mutation.semantic.explorer:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["tests", "."]

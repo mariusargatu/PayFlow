@@ -73,7 +73,6 @@ class CachingTriageRunner:
             config=self.config,
             budget=self.budget,
             llm=LLMClient(self.config, self.budget),
-            offline=False,
         )
         self._cache: dict[tuple, dict[str, str]] = {}
 

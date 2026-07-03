@@ -1,0 +1,126 @@
+{
+  "source": "anthropic:claude-sonnet-5",
+  "generated_at": "2026-07-03 13:25 UTC",
+  "note": "Informational only. Survivors are candidate gaps to confirm against the frozen spec; the equivalent-mutant judge only pre screens them. Not a gate; the mutmut baseline (mutation/baseline.json) is the authoritative number.",
+  "preprocessing": {
+    "raw": 9,
+    "duplicate": 0,
+    "trivial": 0,
+    "kept": 9
+  },
+  "budget": {
+    "model": "claude-sonnet-5",
+    "calls": 9,
+    "max_calls": 30,
+    "input_tokens": 28813,
+    "output_tokens": 5370,
+    "total_tokens": 34183
+  },
+  "summary": {
+    "total": 9,
+    "killed": 1,
+    "survived": 8,
+    "timeout": 0,
+    "other": 0
+  },
+  "mutants": [
+    {
+      "id": "bug-void-full-release",
+      "file": "payflow/domain/service.py",
+      "desc": "Void releases the full original authorized_amount instead of the remaining held balance after a partial capture, over-crediting external settlement for funds already captured.",
+      "expect": "INV: hold release on void must equal authorized_amount - captured_amount (no double release of already-captured funds)",
+      "status": "survived",
+      "equivalent": {
+        "verdict": "real",
+        "reason": "When an intent is partially captured before void, the mutant releases the full authorized_amount instead of only the uncaptured remainder, double-releasing already-captured funds and producing a different ledger balance."
+      }
+    },
+    {
+      "id": "bug-refund-cap-total",
+      "file": "payflow/domain/service.py",
+      "desc": "Refundable amount ignores prior refunds, so repeated partial refunds can cumulatively exceed captured_amount, driving the merchant account balance negative.",
+      "expect": "INV-3: cumulative refunded_amount must never exceed captured_amount; merchant balance must never go negative",
+      "status": "survived",
+      "equivalent": {
+        "verdict": "real",
+        "reason": "Removing the subtraction of refunded_amount allows refunding more than the actual remaining captured amount, letting cumulative refunds exceed captured_amount and violating INV-3."
+      }
+    },
+    {
+      "id": "bug-capture-swap-ledger",
+      "file": "payflow/domain/service.py",
+      "desc": "Swaps source/destination on the capture ledger pair, debiting the merchant and crediting the holds account instead of the reverse, inverting fund flow on every capture.",
+      "expect": "Ledger pair direction for CAPTURE must debit ACCT_HOLDS and credit the merchant account",
+      "status": "survived",
+      "equivalent": {
+        "verdict": "real",
+        "reason": "Swapping debit/credit reverses the CAPTURE ledger direction, causing merchant balance to decrease and ACCT_HOLDS to increase instead of vice versa, which is observable via get_balance."
+      }
+    },
+    {
+      "id": "bug-authorize-swap-ledger",
+      "file": "payflow/domain/service.py",
+      "desc": "Swaps source/destination on the authorization hold, crediting external settlement and debiting holds instead of the reverse, inverting the hold's ledger effect.",
+      "expect": "Ledger pair direction for AUTHORIZE_HOLD must debit ACCT_EXTERNAL_SETTLEMENT and credit ACCT_HOLDS",
+      "status": "survived",
+      "equivalent": {
+        "verdict": "real",
+        "reason": "Swapping debit/credit reverses the ledger direction for AUTHORIZE_HOLD, causing balance_of queries on ACCT_HOLDS and ACCT_EXTERNAL_SETTLEMENT to return opposite-sign observable results."
+      }
+    },
+    {
+      "id": "bug-allow-zero-amount",
+      "file": "payflow/domain/service.py",
+      "desc": "Positive-amount validation now accepts zero, allowing zero-amount intents, captures, and refunds that should be rejected.",
+      "expect": "Amounts subject to _require_positive must be an integer >= 1 (zero is invalid)",
+      "status": "survived",
+      "equivalent": {
+        "verdict": "real",
+        "reason": "With amount=0, original raises ValidationError while mutated allows 0 through, changing behavior for e.g. create_intent(amount=0)."
+      }
+    },
+    {
+      "id": "bug-fee-equal-allowed",
+      "file": "payflow/domain/fees.py",
+      "desc": "Allows a capture amount exactly equal to the fee, letting a capture net zero to the merchant after the platform fee, violating the 'must be strictly greater than fee' business rule.",
+      "expect": "Capture amount must be strictly greater than the capture fee (amount > fee), not merely >= fee",
+      "status": "survived",
+      "equivalent": {
+        "verdict": "real",
+        "reason": "When amount == fee, the original raises ValidationError but the mutated code does not, changing observable behavior for that input."
+      }
+    },
+    {
+      "id": "bug-void-from-captured",
+      "file": "payflow/domain/state_machine.py",
+      "desc": "Permits voiding an intent that has already been fully CAPTURED, a terminal-adjacent state that should only be reachable via refund, letting a captured payment be voided and its hold 'released' after funds already moved to the merchant.",
+      "expect": "State machine: void is only valid from CREATED, AUTHORIZED, or PARTIALLY_CAPTURED, never from CAPTURED",
+      "status": "survived",
+      "equivalent": {
+        "verdict": "real",
+        "reason": "Now voiding a CAPTURED intent succeeds instead of raising InvalidStateError, directly violating the stated invariant."
+      }
+    },
+    {
+      "id": "bug-idempotency-fingerprint-no-endpoint",
+      "file": "payflow/domain/idempotency.py",
+      "desc": "Fingerprint drops the endpoint from the hashed payload, so the same idempotency key with an identical payload but a different endpoint (e.g. capture vs refund with the same {id, amount}) is treated as a valid replay instead of a conflict.",
+      "expect": "Idempotency fingerprint must bind the key to both endpoint and payload; cross-endpoint reuse of a key must raise IdempotencyConflictError",
+      "status": "survived",
+      "equivalent": {
+        "verdict": "real",
+        "reason": "Removing endpoint from the fingerprint means the same key with the same payload but different endpoint yields the same fingerprint, so cross-endpoint reuse will be treated as a valid replay instead of raising IdempotencyConflictError."
+      }
+    },
+    {
+      "id": "bug-capture-fee-from-merchant",
+      "file": "payflow/domain/service.py",
+      "desc": "Draws the capture fee from the merchant account instead of external settlement, contradicting ADR-0005 and causing a full refund to leave the merchant balance negative by the fee amount instead of returning it to zero.",
+      "expect": "ADR-0005: capture fee must be debited from ACCT_EXTERNAL_SETTLEMENT, never from the merchant account (INV-3: merchant balance never negative, full refund returns merchant to zero)",
+      "status": "killed",
+      "killed_by": [
+        "mutation/replay/test_agent_replay.py::test_mr_scale_amounts_exact_equivalence"
+      ]
+    }
+  ]
+}

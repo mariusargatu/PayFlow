@@ -9,7 +9,6 @@ field. Results append into ``proposed_rules`` through the state reducer.
 
 from __future__ import annotations
 
-from ..golden import GOLDEN_RULES
 from ..schemas import Rule
 from ..state import AgentState
 
@@ -23,7 +22,6 @@ _SYSTEM = (
     "requested structured form."
 )
 
-_GOLDEN_BY_OP = {r.operation_id: r for r in GOLDEN_RULES}
 
 
 def _prompt(endpoint) -> str:
@@ -49,16 +47,6 @@ def _prompt(endpoint) -> str:
 
 def infer_endpoint_rules(state: AgentState, deps) -> dict:
     endpoint = state["current_endpoint"]
-    if deps.offline or deps.llm is None:
-        rule = _GOLDEN_BY_OP.get(endpoint.operation_id) or Rule(
-            operation_id=endpoint.operation_id,
-            name=endpoint.operation_id,
-            kind="query",
-            effect="none",
-            success_status=200,
-        )
-        return {"proposed_rules": [rule]}
-
     rule = deps.llm.propose(Rule, _SYSTEM, _prompt(endpoint))
     rule.operation_id = endpoint.operation_id
     return {

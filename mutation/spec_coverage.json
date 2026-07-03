@@ -1,0 +1,28 @@
+{
+  "note": "Human confirmed (ADR-0007 decision 5: the spec is the referee) coverage of the FROZEN spec invariants and boundary rules by the agent discovered replay suite (generated_specs/). Derived by adjudicating the 2026-07-03 semantic exploration survivors against specs/. Informational only: never gates, never moves the mutmut baseline. The gated number is the kill rate above.",
+  "generated_at": "2026-07-03",
+  "source": "human adjudication of semantic survivors vs specs/",
+  "legend": {
+    "full": "the discovered suite asserts this as the spec states it",
+    "narrowed": "asserted, but weaker than the spec (a defensible reason, but coverage shrank)",
+    "partial": "partly asserted via related rules",
+    "reachability": "an oracle exists but generation never reaches the triggering state (survives even at 6x budget)",
+    "absent": "no oracle in the discovered suite"
+  },
+  "invariants": [
+    {"id": "INV-1", "text": "captured_amount ≤ authorized_amount", "coverage": "full", "note": "captured_le_authorized invariant"},
+    {"id": "INV-2", "text": "refunded_amount ≤ captured_amount", "coverage": "full", "note": "refunded_le_captured invariant"},
+    {"id": "INV-3", "text": "merchant, holds, platform_fees never negative", "coverage": "narrowed", "note": "discovered suite checks merchant accounts only; holds and platform_fees dropped to keep Hypothesis shrinking non flaky. Misses the ledger direction survivors."},
+    {"id": "INV-4", "text": "global debits == credits (conservation)", "coverage": "absent", "note": "no conservation oracle in the discovered suite"},
+    {"id": "INV-5", "text": "transitions only along the state table; nothing from VOIDED or REFUNDED", "coverage": "partial", "note": "illegal-state rejection rules cover most transitions"},
+    {"id": "INV-6", "text": "preconditions enforced: illegal op returns 409, changes nothing", "coverage": "full", "note": "authorize/capture/refund/void illegal-state rules plus assert_unchanged"},
+    {"id": "INV-7", "text": "every AUTHORIZED+ intent has ≥ 1 ledger entry pair", "coverage": "absent", "note": "no check that a ledger entry pair exists"}
+  ],
+  "boundary_rules": [
+    {"id": "amount ≥ 1", "text": "amount < 1 returns 422", "coverage": "absent", "note": "zero or negative amount never probed (survivor: allow-zero)"},
+    {"id": "capture > fee", "text": "capture ≤ fee returns 422", "coverage": "absent", "note": "boundary where amount equals the fee never probed (survivor: fee-equal)"},
+    {"id": "capture ≤ remaining", "text": "capture over remaining hold returns 422", "coverage": "full", "note": "capture_over_limit_rejected"},
+    {"id": "refund ≤ refundable", "text": "refund over refundable returns 422", "coverage": "reachability", "note": "refund_over_limit_rejected exists; sequence unreached even at 6x budget (survivor: refund-cap-total)"},
+    {"id": "idempotency", "text": "same key, different endpoint returns 409", "coverage": "absent", "note": "MR-4 replays the same endpoint only (survivor: idempotency-cross-endpoint)"}
+  ]
+}

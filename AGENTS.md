@@ -28,7 +28,8 @@ uv run pytest tests/                 # Layer 1 sanity + concurrency + drift gate
 uv run demo                          # run the fast gates, one screen colored summary
 
 # Phase 2 + 3 (works now):
-uv run agent-run                     # discovery agent vs correct PayFlow, now discovers rules, invariants AND metamorphic relations (renders generated_specs/payflow_spec.py + payflow_mr.py). COSTS OPENAI TOKENS (~$0.01/run); needs OPENAI_API_KEY in .env. Add --offline for a free deterministic pipeline pass. Add --view for a live Rich TUI of the pipeline.
+uv run agent-run                     # discovery agent vs correct PayFlow: discovers rules, invariants AND metamorphic relations (renders generated_specs/payflow_spec.py + payflow_mr.py). COSTS OPENAI TOKENS (~$0.01/run); needs OPENAI_API_KEY in .env, else it prints a message and skips (no failure). Add --view for a live Rich TUI of the pipeline.
+uv run full                          # run the whole pyramid end to end: discovery -> fast gates -> Layer 2 -> mutation baseline -> semantic explorer -> trust report. Key gated steps (discovery, Layer 2) skip with a message when OPENAI_API_KEY is unset. Convenience runner, not a gate; slow (mutation is minutes).
 uv run explain-run [latest|<ts>]     # replay a finished run visually (pipeline path, funnel, triage, cost) from agent_runs/<ts>/report.json; deterministic, no tokens
 uv run python tools/triage_validation.py  # Run B: triage vs an in process broken PayFlow (dropped INV-1 precondition); costs a few tokens
 uv run python tools/mr_validation.py      # flagship: a fee misroute only MR-1 catches (invariant suite green, MR red, triage real_bug); costs a few tokens
@@ -37,6 +38,7 @@ uv run python tools/mr_validation.py      # flagship: a fee misroute only MR-1 c
 uv run build-report                        # fold the report (gates, funnel, plain English decomposition, mutation, role coloured pipeline graph) into site/index.html between its markers. One page; no standalone file. Regenerate after new runs.
 uv run python -m mutmut run                # Layer 3 mutation run over the payment core (in process replay of the agent specs); minutes, no tokens
 uv run python mutation/run_baseline.py     # recompute mutation/baseline.json (headline + full suite kill rates); nightly recomputes
+uv run semantic-mutation                   # Layer 3 semantic explorer (ADR-0007, revised): a cross family Anthropic adversary generates realistic bugs vs the agent replay, deterministically dedups/drops trivial ones, classifies killed/survived/timeout, pre screens each survivor with an equivalent mutant judge, writes mutation/semantic_report.json. INFORMATIONAL, never gates, never touches baseline.json, always exits 0. COSTS ANTHROPIC TOKENS; needs `uv sync --extra adversary` + ANTHROPIC_API_KEY (skips honestly without either). Nondeterministic. `--no-screen` skips the judge. Also runnable as `python -m mutation.semantic.explorer`.
 actionlint .github/workflows/*.yml         # validate CI config (if actionlint installed)
 # LangWatch tracing is guarded/optional: uv sync --extra observability, then set LANGWATCH_ENDPOINT (local docker compose deferred)
 

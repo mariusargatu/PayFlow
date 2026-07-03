@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from ..golden import GOLDEN_RELATIONS
 from ..schemas import MetamorphicRelation
 from ..state import AgentState
 
@@ -73,11 +72,6 @@ def _prompt(state: AgentState) -> str:
 
 
 def infer_relations(state: AgentState, deps) -> dict:
-    if deps.offline or deps.llm is None:
-        return {
-            "proposed_relations": list(GOLDEN_RELATIONS),
-            "history": ["infer_relations: offline golden relations"],
-        }
     result = deps.llm.propose(_RelationList, _SYSTEM, _prompt(state))
     relations = result.relations
     return {

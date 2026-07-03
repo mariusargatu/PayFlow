@@ -5,14 +5,15 @@ property generation graph against it, and writes artifacts under
 ``agent_runs/<timestamp>/``. Loads ``.env`` for the OpenAI key; the key is never
 printed or logged. A budget exceeded run still leaves a partial report behind.
 
-WARNING: a non offline run calls the OpenAI API and costs tokens. Use --offline
-to exercise the deterministic pipeline (compile, execute, report) for free.
+A run calls the OpenAI API and costs tokens. Without OPENAI_API_KEY set it prints
+a message and skips rather than failing, so a keyless environment stays green.
 """
 
 from __future__ import annotations
 
 import argparse
 import contextlib
+import os
 import socket
 import subprocess
 import sys
@@ -87,21 +88,24 @@ def _await_ready(base_url: str, process: subprocess.Popen, timeout: float = 20.0
     raise RuntimeError("PayFlow did not become ready in time")
 
 
-def run_agent(offline: bool, bug: str | None = None, run_dir: str | None = None, view: bool = False) -> dict:
+def run_agent(bug: str | None = None, run_dir: str | None = None, view: bool = False) -> dict:
     load_dotenv(_ROOT / ".env")
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("agent-run: OPENAI_API_KEY not set; skipping discovery. Add it to .env to run.")
+        return {"skipped": "no OPENAI_API_KEY"}
     from .observability import setup as observability_setup
 
     if observability_setup():
         print("agent-run: LangWatch tracing enabled")
     config = AgentConfig.from_env()
     budget = CostGuard.from_env()
-    llm = None if offline else LLMClient(config, budget)
+    llm = LLMClient(config, budget)
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    suffix = "-offline" if offline else (f"-{bug}" if bug else "")
+    suffix = f"-{bug}" if bug else ""
     run_dir = run_dir or str(_ROOT / "agent_runs" / f"{stamp}{suffix}")
     deps = AgentDeps(
-        config=config, budget=budget, llm=llm, offline=offline,
+        config=config, budget=budget, llm=llm,
         generated_spec_path=str(_ROOT / "generated_specs" / "payflow_spec.py"),
         generated_mr_path=str(_ROOT / "generated_specs" / "payflow_mr.py"),
     )
@@ -110,7 +114,7 @@ def run_agent(offline: bool, bug: str | None = None, run_dir: str | None = None,
     app = build_graph(deps, checkpointer=checkpointer)
     thread = {"configurable": {"thread_id": "run"}, "recursion_limit": 60}
 
-    print(f"agent-run: model={config.model} offline={offline} bug={bug or 'none'}")
+    print(f"agent-run: model={config.model} bug={bug or 'none'}")
     print(f"agent-run: artifacts -> {run_dir}")
 
     import tempfile
@@ -174,12 +178,11 @@ def _invoke_with_view(app, initial: dict, thread: dict, deps, run_dir: str) -> N
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="PayFlow property generation agent")
-    parser.add_argument("--offline", action="store_true", help="no LLM calls; use golden proposals")
     parser.add_argument("--bug", choices=["fm_a", "fm_b", "fm_c"], default=None)
     parser.add_argument("--run-dir", default=None)
     parser.add_argument("--view", action="store_true", help="live TUI of the pipeline as it runs")
     args = parser.parse_args()
-    run_agent(offline=args.offline, bug=args.bug, run_dir=args.run_dir, view=args.view)
+    run_agent(bug=args.bug, run_dir=args.run_dir, view=args.view)
     return 0
 
 

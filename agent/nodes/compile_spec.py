@@ -15,15 +15,17 @@ from ..state import AgentState
 
 
 def _dedupe_last(rules):
-    """Keep the last rule per name so refined proposals win over their originals.
+    """Keep the last rule per operation so refined proposals win over their originals.
 
     ``proposed_rules`` accumulates through a reducer (the Send fan in and every
-    refine pass append), so a corrected rule shares its predecessor's name and
-    must shadow it here.
+    refine pass append), so a corrected rule shares its predecessor's operation_id
+    (refine preserves both name and operation_id) and must shadow it here. Keying on
+    operation_id, not name, means two endpoints the model happened to give the same
+    name do not collapse into one and silently drop an operation from the spec.
     """
     seen: dict[str, object] = {}
     for rule in rules:
-        seen[rule.name] = rule
+        seen[rule.operation_id or rule.name] = rule
     return list(seen.values())
 
 

@@ -406,12 +406,12 @@ PayFlow/
 ├── docs/
 │   ├── design.md                  # this document
 │   └── adr/                       # decisions of record (0001 = foundational, immutable)
-├── .claude/                       # agent skills (journey-log) + project permissions
+├── .claude/                       # agent skills + project permissions
 ├── .github/workflows/             # CI gate contract (§10) as actual config
 └── AGENTS.md                      # agent operating manual (CLAUDE.md symlinks here)
 ```
 
-A local build log and planning notes also live in the working tree (`docs/journey/`, `docs/retrospectives/`, `.planning/`) but are maintainer only and not part of the published repo.
+A local build log and planning notes also live in the working tree (`.planning/`) but are maintainer only and not part of the published repo.
 
 ## 14. Build roadmap
 

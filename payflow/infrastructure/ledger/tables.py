@@ -30,11 +30,13 @@ def insert_posting(
 
 
 def balance_of(conn: sqlite3.Connection, account_id: str) -> int:
-    row = conn.execute(
-        "SELECT "
-        "COALESCE(SUM(CASE WHEN direction = 'credit' THEN amount ELSE 0 END), 0) - "
-        "COALESCE(SUM(CASE WHEN direction = 'debit' THEN amount ELSE 0 END), 0) AS balance "
-        "FROM ledger_postings WHERE account_id = ?",
+    # Sum in Python (arbitrary precision) rather than with SQLite's SUM, whose int64
+    # accumulator raises OperationalError('integer overflow') once an aggregate
+    # exceeds 2**63-1 even though every individual amount is within the schema bound.
+    # That would surface as a 500 on a query the API accepts; a Python sum keeps the
+    # balance an exact integer and never overflows.
+    rows = conn.execute(
+        "SELECT direction, amount FROM ledger_postings WHERE account_id = ?",
         (account_id,),
-    ).fetchone()
-    return int(row["balance"])
+    ).fetchall()
+    return sum(r["amount"] if r["direction"] == "credit" else -r["amount"] for r in rows)

@@ -179,7 +179,6 @@ def main() -> int:
         config=config,
         budget=budget,
         llm=LLMClient(config, budget),
-        offline=False,
         generated_spec_path=str(spec_path),
     )
 
@@ -220,7 +219,9 @@ def main() -> int:
     triage_state.update(triage(triage_state, deps))
     verdicts = triage_state["triaged_failures"]
     real = sum(1 for v in verdicts if v.classification == "real_bug")
-    accuracy = real / len(verdicts) if verdicts else 0.0
+    # Denominator is the failures presented, not the verdicts returned, so a partial
+    # triage cannot report a vacuous 100%.
+    accuracy = real / len(mr_result.failures) if mr_result.failures else 0.0
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = _ROOT / "agent_runs" / f"{stamp}-mr-validation"

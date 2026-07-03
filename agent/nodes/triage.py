@@ -94,22 +94,19 @@ def _prompt(state: AgentState, annotations: dict[str, list[str]]) -> str:
     )
 
 
-def _offline_verdicts(state: AgentState) -> list[TriageVerdict]:
-    return [
-        TriageVerdict(failure_ref=f.tag(), classification="real_bug", target="", reasoning="offline default")
-        for f in state["hypothesis_results"].failures
-    ]
-
-
-def _aggregate(vote_lists: list[list[TriageVerdict]]) -> list[TriageVerdict]:
+def _aggregate(vote_lists: list[list[TriageVerdict]], n_ballots: int) -> list[TriageVerdict]:
     """Reduce N independent triage calls to one verdict per failure by majority.
 
-    A clear plurality wins. A tie for first place (which includes an N=3 three way
-    split) is not a verdict the agent can stand behind, so it escalates to
-    needs_human rather than picking one arbitrarily. A uniformly biased judge
-    (every call agreeing on the wrong verdict, e.g. the regression hook) still
-    produces that verdict, so voting does not launder a biased judge -- exactly
-    the property the Layer 2 regression gate depends on.
+    A verdict must win a strict majority of ALL n_ballots, not just of the ballots
+    that happened to mention the failure: if only one of three judges classified a
+    failure, that is not a confident verdict, so it escalates to needs_human rather
+    than passing as unanimous. A tie for first place (including an N=3 three way
+    split) escalates too. When a class wins, its target is majority voted among the
+    winning ballots, so refine is never pointed at a target only one judge named.
+
+    A uniformly biased judge (every call agreeing on the wrong verdict, e.g. the
+    regression hook) still produces that verdict, so voting does not launder a
+    biased judge -- exactly the property the Layer 2 regression gate depends on.
     """
     grouped: dict[str, list[TriageVerdict]] = {}
     order: list[str] = []
@@ -120,42 +117,45 @@ def _aggregate(vote_lists: list[list[TriageVerdict]]) -> list[TriageVerdict]:
                 order.append(v.failure_ref)
             grouped[v.failure_ref].append(v)
 
+    def _escalate(ref: str, reason: str) -> TriageVerdict:
+        return TriageVerdict(
+            failure_ref=ref, classification="needs_human", target="", reasoning=reason
+        )
+
     aggregated: list[TriageVerdict] = []
     for ref in order:
         votes = grouped[ref]
         tally = Counter(v.classification for v in votes).most_common()
         winner, top_n = tally[0]
-        split = len(tally) > 1 and tally[1][1] == top_n
-        if split:
-            spread = ", ".join(f"{cls}x{n}" for cls, n in tally)
+        tied = len(tally) > 1 and tally[1][1] == top_n
+        spread = ", ".join(f"{cls}x{n}" for cls, n in tally)
+        if tied:
+            aggregated.append(_escalate(ref, f"triage vote split ({spread}); escalated for a human"))
+        elif top_n * 2 <= n_ballots:
+            # winner is a plurality but not a majority of all judges (e.g. only 1 of
+            # 3 judges classified this failure at all): not confident enough.
             aggregated.append(
-                TriageVerdict(
-                    failure_ref=ref,
-                    classification="needs_human",
-                    target="",
-                    reasoning=f"triage vote split ({spread}); escalated for a human",
-                )
+                _escalate(ref, f"no majority across {n_ballots} judges ({spread}); escalated for a human")
             )
         else:
-            representative = next(v for v in votes if v.classification == winner)
+            winning = [v for v in votes if v.classification == winner]
+            target = Counter(v.target for v in winning).most_common(1)[0][0]
+            representative = next(v for v in winning if v.target == target)
             aggregated.append(representative)
     return aggregated
 
 
 def triage(state: AgentState, deps) -> dict:
-    if deps.offline or deps.llm is None:
-        verdicts = _offline_verdicts(state)
-    else:
-        annotations = build_annotations(
-            state, getattr(deps, "accepted_proposals_path", None)
-        )
-        prompt = _prompt(state, annotations)
-        system = _system()
-        votes = max(1, getattr(deps.config, "triage_votes", 1))
-        ballots = [
-            deps.llm.propose(_TriageList, system, prompt).verdicts for _ in range(votes)
-        ]
-        verdicts = ballots[0] if votes == 1 else _aggregate(ballots)
+    annotations = build_annotations(
+        state, getattr(deps, "accepted_proposals_path", None)
+    )
+    prompt = _prompt(state, annotations)
+    system = _system()
+    votes = max(1, getattr(deps.config, "triage_votes", 1))
+    ballots = [
+        deps.llm.propose(_TriageList, system, prompt).verdicts for _ in range(votes)
+    ]
+    verdicts = ballots[0] if votes == 1 else _aggregate(ballots, len(ballots))
     return {
         "triaged_failures": verdicts,
         "history": [

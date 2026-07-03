@@ -41,20 +41,38 @@ def parse_pytest_output(output: str, returncode: int) -> TestRunResult:
     if returncode == 0:
         return TestRunResult(passed=True, output_tail=_tail(output))
 
-    ce_match = _COUNTEREXAMPLE.search(output)
-    counterexample = ce_match.group(1).strip() if ce_match else ""
+    # Each failing property prints its own counterexample block (Hypothesis
+    # "Falsifying example" or the state machine "Steps leading up to this error")
+    # just before its tagged AssertionError. Associate each assertion with the
+    # nearest preceding block, so a multi failure run does not hand every failure
+    # the first failure's reproduction (which would misdirect triage and refine).
+    ce_blocks = [(m.start(), m.group(1).strip()) for m in _COUNTEREXAMPLE.finditer(output)]
+
+    def _counterexample_before(pos: int) -> str:
+        block = ""
+        for start, text in ce_blocks:
+            if start < pos:
+                block = text
+            else:
+                break
+        return block
 
     failures: list[Failure] = []
     seen: set[str] = set()
-    for message in _ASSERTION.findall(output):
-        message = message.strip()
+    for match in _ASSERTION.finditer(output):
+        message = match.group(1).strip()
         kind, proposal_id = _classify_tag(message)
         dedupe = f"{kind}:{proposal_id}"
         if dedupe in seen:
             continue
         seen.add(dedupe)
         failures.append(
-            Failure(kind=kind, proposal_id=proposal_id, message=message, counterexample=counterexample)
+            Failure(
+                kind=kind,
+                proposal_id=proposal_id,
+                message=message,
+                counterexample=_counterexample_before(match.start()),
+            )
         )
 
     if not failures:
@@ -67,7 +85,7 @@ def parse_pytest_output(output: str, returncode: int) -> TestRunResult:
                     kind="rule",
                     proposal_id="<execution_error>",
                     message="compiled spec failed to run (see output_tail)",
-                    counterexample=counterexample,
+                    counterexample=ce_blocks[0][1] if ce_blocks else "",
                 )
             ],
             output_tail=_tail(output),

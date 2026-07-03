@@ -36,8 +36,11 @@ Layers 0 and 1 run on every commit and block a merge; Layers 2 and 3 run nightly
 | 1 | **Behavioral** (Hypothesis) | Does it behave as the spec says, across many generated cases? | A race no sequential test can express: under `fm_a`, 16 threads on one idempotency key produced duplicate captures while sequential replay stayed green. |
 | 2 | **Agent judgment** (AGENT-MR) | Can you trust the verifier's own verdicts? | A verdict flipped `real_bug` → `bad_relation` on a single reword, while reorder and padding never moved it: the judge is lexically fragile. |
 | 3 | **Mutation ground truth** (`mutmut`) | Is the suite checking anything, or just running? | A refund path the suite never reached (62 of 181 survivors in `service.refund`); closing the loop through discovery moved the kill rate off its 65.3% floor. |
+| + | **Semantic exploration** (LLM adversary, *informal*) | Does the suite have an oracle for every frozen rule, or just run green? | INV-3 was silently narrowed and INV-4 (ledger conservation) dropped; 5 of 12 spec rules had no oracle at all. Never gates; a survivor is a candidate gap a human confirms. |
 
 The agent **proposes** falsifiable checks (rules, invariants, metamorphic relations); a deterministic engine **disposes**, Hypothesis falsifies, the compiler and mutation testing ground truth. The LLM never marks its own homework.
+
+Alongside the four gates, an informational **semantic mutation explorer** (ADR-0007) sends a different model family in as an adversary to inject realistic domain bugs that mutmut's syntactic operators cannot express. Confirming its first run's survivors against `specs/` turned it into a coverage meter of the frozen spec: of the 7 invariants plus 5 boundary rules, the agent discovered suite asserts **4 fully, 3 weakly or unreachably, and misses 5**. The sharpest findings: INV-3 was silently narrowed to merchant accounts (holds and platform_fees dropped, to keep Hypothesis shrinking stable), INV-4 (global ledger conservation) is absent, and the `amount < 1`, `capture ≤ fee`, and same key across different endpoints rules are never probed. It never gates and never edits the specs; a survivor is a candidate gap a human confirms and routes back through discovery. The trust report renders the full coverage matrix.
 
 > **The `fm_a` / `fm_b` / `fm_c` names are deliberate bugs.** `PAYFLOW_BUG=fm_a` (and `fm_b`, `fm_c`) swaps a correct implementation for a broken one at startup, so each layer can be shown catching its class of mistake on demand. They are off by default and never set in a real configuration; they exist only to prove the checks work.
 
@@ -68,7 +71,7 @@ uv run pytest tests/    # the full replay slice
 uv run build-report     # regenerate the report folded into site/index.html
 ```
 
-`uv run agent-run` runs the discovery agent (needs `OPENAI_API_KEY` in `.env`, a few cents; `--offline` is free; `--view` is a live TUI). Full per layer command list: [`AGENTS.md`](AGENTS.md).
+`uv run agent-run` runs the discovery agent (needs `OPENAI_API_KEY` in `.env`, a few cents; without a key it prints a message and skips; `--view` is a live TUI). `uv run full` runs the whole pyramid end to end. Full per layer command list: [`AGENTS.md`](AGENTS.md).
 
 <details>
 <summary><b>What is novel here</b></summary>

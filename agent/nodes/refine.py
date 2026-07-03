@@ -98,9 +98,6 @@ def refine(state: AgentState, deps) -> dict:
         failure = by_ref.get(verdict.failure_ref)
         if failure is None:
             continue
-        if deps.offline or deps.llm is None:
-            notes.append(f"refine: offline no-op for {verdict.failure_ref}")
-            continue
         if verdict.classification == "bad_rule":
             target = verdict.target or _base(failure.proposal_id)
             current = rules.get(target)
@@ -116,7 +113,7 @@ def refine(state: AgentState, deps) -> dict:
             new_rules.append(corrected)
             notes.append(f"refine: rewrote rule {corrected.name} -> legal={corrected.legal_states}")
         elif verdict.classification == "bad_invariant":
-            target = verdict.target
+            target = verdict.target or failure.proposal_id
             current = invariants.get(target)
             if current is None:
                 continue

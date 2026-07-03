@@ -77,7 +77,7 @@ class ModelResult:
     note: str = ""
 
 
-def _run_model(model: str) -> ModelResult:
+def _run_model(model: str, max_usd: float) -> ModelResult:
     from transforms import single_failure_state
 
     # Two budgets: OFF passes (raw judge: two reruns + two paraphrases) and the ON
@@ -88,10 +88,10 @@ def _run_model(model: str) -> ModelResult:
     config_off = AgentConfig(model=model, triage_votes=1)
     config_on = AgentConfig(model=model, triage_votes=VOTES_ON)
     deps_off = AgentDeps(
-        config=config_off, budget=budget_off, llm=LLMClient(config_off, budget_off), offline=False
+        config=config_off, budget=budget_off, llm=LLMClient(config_off, budget_off)
     )
     deps_on = AgentDeps(
-        config=config_on, budget=budget_on, llm=LLMClient(config_on, budget_on), offline=False
+        config=config_on, budget=budget_on, llm=LLMClient(config_on, budget_on)
     )
 
     pairs = [(fx, ff) for fx in _fixtures() for ff in fx.failures]
@@ -99,7 +99,13 @@ def _run_model(model: str) -> ModelResult:
     correct_raw = correct_voted = stable = 0
     void_raw = void_voted = "<none>"
 
+    n = 0
     for fx, ff in pairs:
+        # Enforce the dollar cap DURING the run, not only between models: stop before
+        # the next fixture once this model's spend has reached its share of the budget.
+        if budget_off.approx_cost_usd(model) + budget_on.approx_cost_usd(model) >= max_usd:
+            print(f"  budget cap ${round(max_usd, 4)} reached mid model; measured {n}/{len(pairs)} fixtures")
+            break
         run1 = _verdict(single_failure_state(fx, ff), deps_off)
         run2 = _verdict(single_failure_state(fx, ff), deps_off)
         para0 = _verdict(single_failure_state(fx, ff, paraphrase=0), deps_off)
@@ -125,18 +131,19 @@ def _run_model(model: str) -> ModelResult:
         stable += is_stable
         if ff.proposal_id == "void_illegal_state":
             void_raw, void_voted = run1, voted
+        n += 1
 
-    n = len(pairs)
     cost_on = budget_on.approx_cost_usd(model)
     cost = budget_off.approx_cost_usd(model) + cost_on
+    denom = n or 1  # n can be 0 if the budget was exhausted before any fixture ran
     return ModelResult(
         model=model,
-        accuracy_raw=round(correct_raw / n, 3),
-        accuracy_voted=round(correct_voted / n, 3),
-        stability=round(stable / n, 3),
+        accuracy_raw=round(correct_raw / denom, 3),
+        accuracy_voted=round(correct_voted / denom, 3),
+        stability=round(stable / denom, 3),
         cost_usd=round(cost, 6),
         verdicts_produced=n,  # shipped (voted) verdicts produced
-        cost_per_verdict=round(cost_on / n, 6) if n else 0.0,
+        cost_per_verdict=round(cost_on / denom, 6) if n else 0.0,
         void_verdict_raw=void_raw,
         void_verdict_voted=void_voted,
         per_fixture=per_fixture,
@@ -267,7 +274,7 @@ def main() -> int:
             print(f"budget cap ${args.budget} reached; skipping {model}")
             break
         print(f"judge_comparison: measuring {model} ...")
-        result = _run_model(model)
+        result = _run_model(model, args.budget - spend)
         spend += result.cost_usd
         results.append(result)
         print(

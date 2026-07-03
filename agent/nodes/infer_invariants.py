@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from ..golden import GOLDEN_INVARIANTS
 from ..schemas import Invariant
 from ..state import AgentState
 
@@ -53,11 +52,6 @@ def _prompt(state: AgentState) -> str:
 
 
 def infer_invariants(state: AgentState, deps) -> dict:
-    if deps.offline or deps.llm is None:
-        return {
-            "proposed_invariants": list(GOLDEN_INVARIANTS),
-            "history": ["infer_invariants: offline golden invariants"],
-        }
     result = deps.llm.propose(_InvariantList, _SYSTEM, _prompt(state))
     invariants = result.invariants
     return {
