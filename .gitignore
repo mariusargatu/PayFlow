@@ -17,6 +17,7 @@ mutants/
 docs/journey/
 docs/retrospectives/
 agent_runs/
+showcase-report/
 .DS_Store
 langwatch/.env
 .playwright-mcp/

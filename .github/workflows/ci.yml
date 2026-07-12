@@ -44,3 +44,21 @@ jobs:
 
       - name: Layer 1 - agent discovered specs replay (in process, offline)
         run: uv run pytest mutation/replay/test_agent_replay.py -q
+
+      # Soft assertion report: runs every check regardless of earlier failures (CI
+      # is bash -e, so the steps above stop at the first red). This renders the full
+      # pass/fail matrix into the run's job summary and uploads it as an artifact, so
+      # a red run still shows exactly which check localized the fault.
+      - name: Pipeline report (soft, runs even if a gate failed)
+        if: always()
+        run: |
+          uv run showcase --report showcase-report || true
+          cat showcase-report/showcase-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pipeline report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-report
+          path: showcase-report/
+          if-no-files-found: warn
