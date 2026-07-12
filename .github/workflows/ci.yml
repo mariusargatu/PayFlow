@@ -60,6 +60,19 @@ jobs:
       - name: Run the gate
         run: ${{ matrix.gate.run }}
 
+  # One stable status check for branch protection to require: it is green only when
+  # every gate in the matrix is green, so protection survives renaming a gate.
+  required:
+    name: verify (required)
+    runs-on: ubuntu-latest
+    needs: [gate]
+    if: always()
+    steps:
+      - name: every gate must be green
+        run: |
+          echo "gate matrix result: ${{ needs.gate.result }}"
+          test "${{ needs.gate.result }}" = "success"
+
   report:
     name: pipeline report
     runs-on: ubuntu-latest
