@@ -39,6 +39,7 @@ dev = [
 
 [project.scripts]
 demo = "tools.demo:main"
+catch = "tools.catch:main"
 full = "tools.full:main"
 agent-run = "agent.runner:main"
 build-report = "tools.trust_report:main"

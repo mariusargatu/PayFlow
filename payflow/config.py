@@ -12,7 +12,12 @@ from dataclasses import dataclass
 DEFAULT_CAPTURE_FEE = 30
 DEFAULT_DB_PATH = "payflow.db"
 
-VALID_BUGS = frozenset({"fm_a", "fm_b", "fm_c"})
+# Runtime bug toggles, read once at startup: fm_a (idempotency check then act) and
+# fm_c (non atomic ledger writes) each swap a correct implementation for a broken one
+# in the running service. fm_b is deliberately absent: it is a build time toggle (an
+# extra admin route module) caught structurally by Layer 0, so it has no runtime
+# effect. load_config gives it an explicit signal; tools/seeded_bugs/ activates it.
+VALID_BUGS = frozenset({"fm_a", "fm_c"})
 
 
 @dataclass(frozen=True)
@@ -29,6 +34,13 @@ def load_config() -> Config:
         raise ValueError("PAYFLOW_CAPTURE_FEE must be a non-negative integer")
 
     bug = os.environ.get("PAYFLOW_BUG") or None
+    if bug == "fm_b":
+        raise ValueError(
+            "fm_b is a build time toggle, not a runtime PAYFLOW_BUG: it is an admin "
+            "route module caught structurally by Layer 0. Activate it with "
+            "tools/seeded_bugs/activate_fm_b.sh and catch it with uv run lint-imports "
+            "(or uv run catch)."
+        )
     if bug is not None and bug not in VALID_BUGS:
         raise ValueError(f"PAYFLOW_BUG must be one of {sorted(VALID_BUGS)} or unset")
 

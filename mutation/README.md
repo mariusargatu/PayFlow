@@ -36,9 +36,14 @@ narrows it within that boundary and explains why the data holders, port
 protocols, SQLite adapters (`repositories.py`), and composition root
 (`factory.py`) are excluded, and records the runtime driven decision.
 
-The mutation sweep runs the same properties at a reduced Hypothesis example budget
-(env in `conftest.py`) for tractable runtime. Fewer examples can only miss kills,
-never invent them, so the reported rate is a conservative floor.
+The mutation sweep runs the same properties at the budgets recorded in
+`baseline.json` (set as env in `conftest.py`) for tractable runtime, and the two
+suites are not reduced the same way. The state machine spec suite runs at a
+reduced budget: `spec_max_examples` 25, down from the committed slice's 50. Fewer
+examples can only miss kills, never invent them, so that suite's reported rate is
+a conservative floor. The metamorphic relation suite is not a floor in the same
+sense: `mr_max_examples` 10 sits at or above the committed slice's 8, so the MR
+kill rate runs at parity with the replayed slice rather than below it.
 
 ## Reproduce
 

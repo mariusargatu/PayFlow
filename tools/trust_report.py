@@ -84,6 +84,22 @@ def _decompose(items: list | None, category: str) -> list[tuple[str, str]]:
     return out
 
 
+# Discovery runs whose name ends in one of these were run against a deliberately
+# broken build (a seeded PAYFLOW_BUG or an in-process patch), so a proposal that
+# fails there has caught a real, labeled bug. Any other run is against the correct
+# build, where the report's own criterion applies: "a proposal that fails against
+# a correct system is a bad proposal" -> a flagged real_bug there is a triage FALSE
+# POSITIVE, not a catch. (The void_illegal_state flag in 20260702T043505Z is one:
+# void from CREATED is legal per specs/state-machine.md; the agent's rule omitted
+# CREATED, so PayFlow's correct 200 was mislabeled. That belongs to Layer 2's story,
+# not the caught-bug panel.)
+_BROKEN_BUILD_SUFFIXES = ("-mr-validation", "-triage-validation")
+
+
+def _against_broken_build(run_name: str) -> bool:
+    return run_name.endswith(_BROKEN_BUILD_SUFFIXES)
+
+
 def _funnel_runs() -> list[dict]:
     runs = []
     for report in sorted(_AGENT_RUNS.glob("*/report.json")):
@@ -97,6 +113,7 @@ def _funnel_runs() -> list[dict]:
         runs.append(
             {
                 "run": report.parent.name,
+                "broken_build": _against_broken_build(report.parent.name),
                 "model": data.get("model", "?"),
                 "rules": funnel.get("proposed_rules", 0),
                 "invariants": funnel.get("proposed_invariants", 0),
@@ -159,23 +176,38 @@ def _stacked_bar(killed: int, survived: int, no_tests: int) -> str:
 
 def _metrics(baseline: dict | None, all_ok: bool, funnel: list[dict]) -> str:
     # The kill rate is shown once only, in the mutation section (its colored
-    # breakdown), so it is deliberately NOT repeated here. These three numbers
-    # appear nowhere else in the report.
-    bugs_caught = len({ref for r in funnel for ref in r.get("flagged", [])})
-    cells = []
-    cells.append(
-        f'<div class="metric"><div class="n" style="color:{_GREEN if all_ok else _RED}">'
-        f'{"PASS" if all_ok else "FAIL"}</div>'
-        '<div class="l">fast gates, run live just now</div></div>'
-    )
-    cells.append(
-        f'<div class="metric"><div class="n">{bugs_caught}</div>'
-        '<div class="l">real bugs the properties caught</div></div>'
-    )
-    cells.append(
-        f'<div class="metric"><div class="n">{len(funnel)}</div>'
-        '<div class="l">recorded agent discovery runs</div></div>'
-    )
+    # breakdown), so it is deliberately NOT repeated here. "Caught" counts only
+    # flags raised against a deliberately broken build; a flag against the correct
+    # build is a triage false positive, reported separately so catch rate and cry
+    # wolf rate are both visible (a gate that cries wolf trains the human to ignore
+    # it). Each tile distinguishes a MEASURED zero from "not measured this build": a
+    # bare 0 at the emotional peak would read as "the pyramid caught nothing", the
+    # opposite of a measured result, so an absent validation run says so in words.
+    broken_runs = [r for r in funnel if r.get("broken_build")]
+    correct_runs = [r for r in funnel if not r.get("broken_build")]
+    bugs_caught = len({ref for r in broken_runs for ref in r.get("flagged", [])})
+    false_positives = len({ref for r in correct_runs for ref in r.get("flagged", [])})
+
+    def _cell(value: str, color: str, label: str) -> str:
+        return (
+            f'<div class="metric"><div class="n" style="color:{color}">{value}</div>'
+            f'<div class="l">{label}</div></div>'
+        )
+
+    cells = [
+        _cell("PASS" if all_ok else "FAIL", _GREEN if all_ok else _RED,
+              "fast gates, run live just now"),
+    ]
+    if broken_runs:
+        cells.append(_cell(str(bugs_caught), _INK, "real bugs caught (vs a broken build)"))
+    else:
+        cells.append(_cell("n/a", _INK3, "no validation run baked in (see uv run catch)"))
+    if correct_runs:
+        cells.append(_cell(str(false_positives), _AMBER if false_positives else _INK,
+                           "triage false positives (vs correct code)"))
+    else:
+        cells.append(_cell("n/a", _INK3, "triage false positives not measured this build"))
+    cells.append(_cell(str(len(funnel)), _INK, "recorded agent discovery runs"))
     return f'<div class="metrics">{"".join(cells)}</div>'
 
 
@@ -336,24 +368,42 @@ def _funnel_section(runs: list[dict]) -> str:
         else ""
     )
 
-    # -- real bugs the properties caught, aggregated across all runs -----------
-    bugs: dict[str, str] = {}
+    # -- real bugs caught vs triage false positives ----------------------------
+    # Split by build: a flag against a deliberately broken build is a genuine
+    # catch; a flag against the correct build is a triage false positive by the
+    # report's own criterion, and belongs to Layer 2's story, not this panel.
+    caught: dict[str, str] = {}
+    false_pos: dict[str, str] = {}
     for r in runs:
+        target = caught if r["broken_build"] else false_pos
         for ref in r["flagged"]:
-            bugs.setdefault(ref, r.get("flagged_why", {}).get(ref, ""))
-    bugs_html = ""
-    if bugs:
-        cards = "".join(
-            '<div style="border-left:3px solid var(--amber);padding:4px 0 4px 14px;margin:10px 0">'
-            f'<div class="mono" style="color:var(--amber);font-weight:600">{html.escape(ref.split(":", 1)[-1].replace("_", " "))}</div>'
+            target.setdefault(ref, r.get("flagged_why", {}).get(ref, ""))
+
+    def _bug_card(ref: str, reason: str, color: str) -> str:
+        return (
+            f'<div style="border-left:3px solid {color};padding:4px 0 4px 14px;margin:10px 0">'
+            f'<div class="mono" style="color:{color};font-weight:600">'
+            f'{html.escape(ref.split(":", 1)[-1].replace("_", " "))}</div>'
             f'<div style="color:var(--ink-2);font-size:13px;margin-top:2px">{html.escape(reason)}</div></div>'
-            for ref, reason in bugs.items()
         )
-        bugs_html = (
+
+    bugs_html = ""
+    if caught:
+        bugs_html += (
             '<h3 style="font-size:15px;margin:26px 0 4px">&#9889; Real bugs the properties caught</h3>'
             '<p class="lead" style="margin-top:4px">A proposal that fails against a correct system is a bad '
-            "proposal; a proposal that fails against a broken one has caught a real bug. These are the latter.</p>"
-            f"{cards}"
+            "proposal; a proposal that fails against a broken one has caught a real bug. These are the latter, "
+            "each raised against a deliberately broken build.</p>"
+            + "".join(_bug_card(ref, reason, _AMBER) for ref, reason in caught.items())
+        )
+    if false_pos:
+        bugs_html += (
+            '<h3 style="font-size:15px;margin:26px 0 4px">Triage false positives, and why Layer 2 exists</h3>'
+            '<p class="lead" style="margin-top:4px">These flags were raised against the <b>correct</b> build, so '
+            "by the criterion above they are bad proposals the judge wrongly called real bugs — not catches. "
+            "They are exactly what Layer 2 (the self-referential AGENT-MR tests on the triage node) is built to "
+            "surface: the checker’s own verdict can be wrong, so its verdicts are themselves tested.</p>"
+            + "".join(_bug_card(ref, reason, _INK3) for ref, reason in false_pos.items())
         )
 
     # -- compact history of every run, newest first ---------------------------
@@ -362,7 +412,13 @@ def _funnel_section(runs: list[dict]) -> str:
         flag = ""
         if r["flagged"]:
             tip = html.escape("; ".join(r.get("flagged_why", {}).get(x, x) for x in r["flagged"]))
-            flag = f'<span title="{tip}" style="color:{_AMBER};margin-left:8px">&#9889;</span>'
+            if r["broken_build"]:
+                flag = f'<span title="{tip}" style="color:{_AMBER};margin-left:8px">&#9889;</span>'
+            else:
+                # A flag against the correct build is a triage false positive, not a
+                # catch: mark it distinctly so the ⚡ never overstates the catch rate.
+                fp_tip = html.escape("triage false positive vs correct build: ") + tip
+                flag = f'<span title="{fp_tip}" style="color:{_INK3};margin-left:8px">&#9432;</span>'
         rows += (
             f'<tr><td class="mono" style="color:{_INK3};font-size:12px">{html.escape(r["run"])}</td>'
             f'<td style="width:55%">{_bar(r["survived"], r["proposed"], _GREEN)}'

@@ -28,10 +28,6 @@ from .seams import Clock, IdGenerator
 _LedgerBackend = CorrectLedgerWriter | SplitCommitLedgerWriter
 
 
-def _allow_negative(account_type: AccountType) -> int:
-    return 1 if account_type == AccountType.EXTERNAL_SETTLEMENT else 0
-
-
 class AccountsRepository:
     def get(self, conn: sqlite3.Connection, account_id: str) -> Account | None:
         row = accounts_sql.get(conn, account_id)
@@ -50,7 +46,6 @@ class AccountsRepository:
             id=account.id,
             name=account.name,
             type=account.type.value,
-            allow_negative=_allow_negative(account.type),
             created_at=account.created_at,
         )
 
@@ -60,7 +55,6 @@ class AccountsRepository:
             id=account.id,
             name=account.name,
             type=account.type.value,
-            allow_negative=_allow_negative(account.type),
             created_at=account.created_at,
         )
 

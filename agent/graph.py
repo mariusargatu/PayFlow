@@ -5,18 +5,17 @@ Shape:
     ingest_spec
       -> infer_endpoint_rules   (Send fan out, one branch per endpoint)
       -> infer_invariants
-      -> infer_relations         (Phase 3 stub, wired but empty)
+      -> infer_relations         (proposes metamorphic relations)
       -> compile_spec
       -> execute
       -> triage      (only on failures)  -> refine -> compile_spec  (loop, budget 5)
                                           -> report
       -> report      (on success, or once triage has nothing fixable)
 
-Deviations from design section 7.4, stated honestly: infer_relations is a Phase 3
-stub, and the "no failures, budget left -> rediscover" edge is omitted (re
-running discovery with nothing falsified spends tokens for no signal). The graph
-is built from whatever nodes are actually wired, so the drift gate reflects
-reality.
+Deviation from design section 7.4, stated honestly: the "no failures, budget left
+-> rediscover" edge is omitted (re running discovery with nothing falsified spends
+tokens for no signal). The graph is built from whatever nodes are actually wired,
+so the drift gate reflects reality.
 """
 
 from __future__ import annotations

@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     type TEXT NOT NULL,
-    allow_negative INTEGER NOT NULL,
     created_at TEXT NOT NULL
 );
 
@@ -71,7 +70,6 @@ class Database:
         conn = sqlite3.connect(self._path, isolation_level=None, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
         conn.execute("PRAGMA busy_timeout=5000")
         return conn
 

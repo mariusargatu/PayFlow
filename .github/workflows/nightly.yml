@@ -2,7 +2,7 @@ name: nightly
 
 # The deeper lane (design §10): full agent re-discovery, the mutation baseline,
 # and the trust report. Manual workflow_dispatch ONLY, not a cron: a public
-# public repo scheduling paid agent runs it cannot fund is theatre. It flips
+# repo scheduling paid agent runs it cannot fund is theatre. It flips
 # to a schedule once an LLM budget lands in CI secrets. Discovery needs the
 # OPENAI_API_KEY secret and skips honestly when it is absent; the mutation
 # baseline and trust report are keyless and always run.
@@ -51,14 +51,14 @@ jobs:
         run: uv run python mutation/run_baseline.py
 
       - name: Trust report (keyless)
-        run: uv run trust-report
+        run: uv run build-report
 
       - name: Upload trust report and mutation baseline
         uses: actions/upload-artifact@v4
         with:
           name: trust-report
           path: |
-            site/trust-report.html
+            site/index.html
             mutation/baseline.json
             mutation/survivors.txt
           if-no-files-found: warn

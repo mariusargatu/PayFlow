@@ -23,6 +23,21 @@ _EFFECT_LEGAL_DEFAULT = {
     "void": ["CREATED", "AUTHORIZED", "PARTIALLY_CAPTURED"],
 }
 
+# The rendered failure message is a contract: a coding agent reads "[INV-4] money
+# not conserved" and acts on it, so the id has to be the FROZEN spec id
+# (specs/invariants.md), not whatever the agent happened to name its proposal.
+# The agent numbers its own invariants freely and has, on one run, called
+# conservation "INV-3"; keyed by the closed invariant kind, this map pins the
+# public label to the frozen numbering so the message never lies about which rule
+# broke. tests/drift/test_spec_coverage.py asserts each oracle carries its
+# canonical tag, so a renderer that stopped normalizing would fail the gate.
+_CANONICAL_INV_ID = {
+    "captured_le_authorized": "INV-1",
+    "refunded_le_captured": "INV-2",
+    "nonneg_balance": "INV-3",
+    "conservation_zero": "INV-4",
+}
+
 
 def _states_set(states: list[str]) -> str:
     return "{" + ", ".join(repr(s) for s in states) + "}" if states else "set()"
@@ -70,18 +85,22 @@ class PayFlowGeneratedMachine(RuleBasedStateMachine):
 
     def __init__(self) -> None:
         super().__init__()
-        # The SUT is a live server whose database persists across Hypothesis
-        # examples, so every check below reads only entities this instance
-        # created (self._model, self._merchants, self._merchant_expected).
-        # Reading global state would make the same step sequence behave
-        # differently across examples (Hypothesis flags that as flaky).
+        # Per-step checks read only entities this instance created (self._model,
+        # self._merchants). For the once-per-example conservation check (INV-4) we
+        # record a baseline of the shared system accounts here and assert MY net
+        # delta against it in teardown: examples run sequentially, so between this
+        # baseline and teardown only this instance's operations move those accounts,
+        # which makes a true global debit==credit check safe on a shared server.
         self._client = httpx.Client(base_url=BASE_URL, timeout=30.0)
         self._model: dict[str, dict] = {}
         self._merchants: list[str] = []
         self._merchant_expected: dict[str, int] = {}
+        self._system_accounts = ("acct_external_settlement", "acct_holds", "acct_platform_fees")
+        self._system_baseline = {a: self._balance(a) for a in self._system_accounts}
 
-    def teardown(self) -> None:
-        self._client.close()
+    # teardown() is composed by the compiler (render_module): it runs the
+    # once-per-example invariant checks (conservation, non-negativity), then
+    # always closes the client.
 
     # -- shared helpers ---------------------------------------------------
 
@@ -266,7 +285,9 @@ def _void_rules(r: Rule, legal: str) -> str:
 '''
 
 
-_INVARIANTS = {
+# Per-step invariants: checked after every rule via @invariant(). Each reads only
+# this instance's own intents, so it is cheap and safe on the shared server.
+_PER_STEP_INVARIANTS = {
     "captured_le_authorized": '''
     @invariant()
     def {name}(self):
@@ -283,32 +304,49 @@ _INVARIANTS = {
             body = self._remote_intent(intent_id)
             assert body["refunded_amount"] <= body["captured_amount"], f"[{id}] {{intent_id}}: refunded {{body['refunded_amount']}} > captured {{body['captured_amount']}}"
 ''',
+}
+
+# Per-example checks: run once from the composed teardown(), not after every step.
+# They read several account balances, so a per-step @invariant would multiply HTTP
+# calls by the step count (measured ~8x slower). A violation they catch (a broken
+# ledger pair, an over-refund to a negative balance) persists to the end of the
+# sequence, so one check per example is sufficient and keeps the suite fast.
+# Rendered as plain methods that teardown() calls by name.
+_PER_EXAMPLE_CHECKS = {
     "conservation_zero": '''
-    @invariant()
-    def {name}(self):
-        # [{id}] conservation of money, as a per merchant balance agreement: each
-        # merchant's server balance must equal captures minus refunds. The fee is
-        # drawn from external settlement, not the merchant (ADR-0005), so it does
-        # not enter the merchant balance. The API exposes no ledger listing, so a
-        # global debit==credit sum is not reachable over HTTP without reading state
-        # from other examples; this instance local check is the strongest
-        # conservation proxy available.
-        for merchant, expected in self._merchant_expected.items():
-            actual = self._balance(merchant)
-            assert actual == expected, f"[{id}] merchant {{merchant}} balance {{actual}} != expected {{expected}} (captures - refunds)"
+    def _check_{name}(self):
+        # [{id}] global conservation of money: every ledger movement is a
+        # balanced debit/credit pair, so the net change across ALL accounts this
+        # instance touched must be exactly zero. Measured as a delta against the
+        # per-instance system-account baseline plus this instance's merchant
+        # balances (merchants start at zero, so their absolute balance is their
+        # delta). A dropped or misweighted pair leaves the net non-zero.
+        net = 0
+        for account_id, baseline in self._system_baseline.items():
+            net += self._balance(account_id) - baseline
+        for account_id in self._merchants:
+            net += self._balance(account_id)
+        assert net == 0, f"[{id}] money not conserved: net delta across every account this run touched is {{net}}, must be 0 (debits == credits)"
 ''',
     "nonneg_balance": '''
-    @invariant()
-    def {name}(self):
-        # [{id}] merchant balances never go negative. Scoped to this instance's
-        # merchants only: the shared system accounts (holds, platform_fees) are
-        # global to the live server, so reading them would leak state from other
-        # Hypothesis examples and make shrinking flaky.
+    def _check_{name}(self):
+        # [{id}] no merchant, holds, or platform_fees balance ever goes negative;
+        # external_settlement is the funding source and may. Merchant checks
+        # are scoped to this instance's accounts; holds and platform_fees are
+        # globally non-negative by construction (holds only carries outstanding
+        # authorizations, platform_fees is only ever credited), so their absolute
+        # balance is safe to assert on the shared server.
         for account_id in self._merchants:
             balance = self._balance(account_id)
             assert balance >= 0, f"[{id}] merchant {{account_id}} balance is negative: {{balance}}"
+        for account_id in ("acct_holds", "acct_platform_fees"):
+            balance = self._balance(account_id)
+            assert balance >= 0, f"[{id}] system account {{account_id}} balance is negative: {{balance}}"
 ''',
 }
+
+# Combined view for validation and the vocabulary drift gate (tests/drift).
+_INVARIANTS = {**_PER_STEP_INVARIANTS, **_PER_EXAMPLE_CHECKS}
 
 
 def _rule_block(r: Rule) -> str:
@@ -333,8 +371,35 @@ def _rule_block(r: Rule) -> str:
 def _invariant_block(inv: Invariant) -> str:
     template = _INVARIANTS.get(inv.kind)
     if template is None:
-        return ""
-    return template.format(name=inv.name, id=inv.id)
+        # A closed-vocabulary member with no template would render to nothing and
+        # pass vacuously, a silent hole in the Layer 1 gate. Fail loudly at
+        # generation time; tests/drift/test_vocabulary_coupling keeps this map in
+        # lockstep with schemas.InvariantKind so a correct build never hits this.
+        raise ValueError(
+            f"no render template for invariant kind {inv.kind!r}; a new InvariantKind "
+            "must ship with a template in _PER_STEP_INVARIANTS or _PER_EXAMPLE_CHECKS"
+        )
+    # Pin the public id to the frozen spec numbering by kind (see _CANONICAL_INV_ID);
+    # fall back to the agent's own id only for a kind we have not mapped.
+    canonical_id = _CANONICAL_INV_ID.get(inv.kind, inv.id)
+    return template.format(name=inv.name, id=canonical_id)
+
+
+def _render_teardown(per_example_names: list[str]) -> str:
+    """Compose teardown(): run each once-per-example check, then close the client."""
+    calls = "".join(f"            self._check_{name}()\n" for name in per_example_names)
+    body = calls or "            pass\n"
+    return (
+        "\n"
+        "    def teardown(self) -> None:\n"
+        "        # Run the once-per-example invariant checks (INV-4 conservation,\n"
+        "        # INV-3 non-negativity), then always close the client. A failure\n"
+        "        # here fails the example and shrinks like any other assertion.\n"
+        "        try:\n"
+        f"{body}"
+        "        finally:\n"
+        "            self._client.close()\n"
+    )
 
 
 def render_module(
@@ -347,8 +412,12 @@ def render_module(
     parts = [_header(len(rules), len(invariants)), _CLASS_PREAMBLE]
     for r in rules:
         parts.append(_rule_block(r))
+    per_example_names: list[str] = []
     for inv in invariants:
         parts.append(_invariant_block(inv))
+        if inv.kind in _PER_EXAMPLE_CHECKS:
+            per_example_names.append(inv.name)
+    parts.append(_render_teardown(per_example_names))
     footer = (
         f"\n\n# Budgets are env overridable so a bug hunt can widen the search"
         f" (examples cost\n# time, not tokens) while the committed replay slice"

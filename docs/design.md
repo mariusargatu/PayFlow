@@ -6,6 +6,30 @@
 
 ---
 
+## Contents
+
+Who reads what: sections 1 to 4 are the narrative (the problem, why it is hard, the loop, and the system under test); sections 5 onward are reference (invariants, agent design, the CI contract, novelty, and references).
+
+1. [TL;DR](#1-tldr)
+2. [Project summary](#2-project-summary)
+3. [Why this, not generic "AI writes tests"](#3-why-this-not-generic-ai-writes-tests)
+4. [The agentic SDLC loop](#4-the-agentic-sdlc-loop)
+5. [System under test: PayFlow](#5-system-under-test-payflow)
+6. [Trust architecture: four layer pyramid](#6-trust-architecture-four-layer-pyramid)
+7. [The property generation agent: LangGraph design](#7-the-property-generation-agent-langgraph-design)
+8. [Metamorphic testing extension](#8-metamorphic-testing-extension)
+9. [Observability & evaluation: LangWatch](#9-observability--evaluation-langwatch)
+10. [CI gate contract](#10-ci-gate-contract)
+11. [Evaluation methodology: proving it works](#11-evaluation-methodology-proving-it-works)
+12. [Novelty & differentiation summary](#12-novelty--differentiation-summary)
+13. [Tech stack summary](#13-tech-stack-summary)
+14. [Build roadmap](#14-build-roadmap)
+15. [Decisions log (formerly open questions)](#15-decisions-log-formerly-open-questions)
+16. [References](#16-references)
+17. [Visual system: legible at a glance](#17-visual-system-legible-at-a-glance)
+
+---
+
 ## 1. TL;DR
 
 This is not just a testing agent demo; it is a demonstration of a **trustworthy agentic SDLC**: a development loop where AI coding agents do the implementation, and a matching, equally agentic verification architecture is what makes that safe with minimal human supervision. Same philosophy end to end: an agent proposes (code, properties, relations), a deterministic engine or gate disposes (Hypothesis, mutation testing, import-linter, CI).
@@ -255,11 +279,12 @@ flowchart TD
     D --> E[compile_spec]
     E --> F["execute (Hypothesis)"]
     F -->|failures found| G[triage]
-    F -->|no failures, budget left| B
     F -->|no failures, done| H[report]
     G -->|real bug| H
     G -->|bad rule/invariant/relation| I[refine] --> E
 ```
+
+Note: the "no failures, budget left" rediscover edge (`execute` back to `infer_endpoint_rules`) is intentionally not wired. Re running discovery with nothing falsified spends tokens for no signal, so a clean run routes straight to `report`; the diagram matches the honest docstring in `agent/graph.py`, which states the deviation from this section in the same words.
 
 ### 7.5 Why `Send`
 
@@ -467,7 +492,7 @@ All links were live at time of research (mid 2026). Descriptions below are summa
 ### D. Metamorphic testing & PBT foundations
 - [Application of property-based testing tools for metamorphic testing](https://arxiv.org/abs/2211.12003): Alzahrani, Spichkova & Harland, RMIT, ENASE 2022. Published version at [SciTePress](https://www.scitepress.org/Papers/2022/111017/111017.pdf).
 - [A Coding Guide for Property-Based Testing Using Hypothesis with Stateful, Differential, and Metamorphic Test Design](https://www.marktechpost.com/2026/04/18/a-coding-guide-for-property-based-testing-using-hypothesis-with-stateful-differential-and-metamorphic-test-design/): April 2026; builds a bank account as a `RuleBasedStateMachine` with metamorphic/differential checks layered on top.
-- [Metamorphic testing — Wikipedia](https://en.wikipedia.org/wiki/Metamorphic_testing)
+- [Metamorphic testing, Wikipedia](https://en.wikipedia.org/wiki/Metamorphic_testing)
 - [Metamorphic Testing for Smart Contract Vulnerabilities Detection](https://arxiv.org/pdf/2303.03179)
 - [The Future of AI-Driven Software Engineering](https://arxiv.org/pdf/2406.07737): frames MT as a leading answer to the oracle problem, flags automated MR discovery as understudied.
 - [Deriving Semantics-Aware Fuzzers from Web API Schemas](https://arxiv.org/pdf/2112.10328)
@@ -482,19 +507,19 @@ All links were live at time of research (mid 2026). Descriptions below are summa
 - [Mutation-Guided Unit Test Generation with a Large Language Model (MUTGEN)](https://arxiv.org/pdf/2506.02954) and [Unify and Triumph](https://arxiv.org/pdf/2503.16144)
 
 ### F. LangGraph, LangWatch & Scenario
-- [Subgraphs — LangGraph Docs](https://docs.langchain.com/oss/python/langgraph/use-subgraphs)
+- [Subgraphs, LangGraph Docs](https://docs.langchain.com/oss/python/langgraph/use-subgraphs)
 - [Scaling LangGraph Agents: Parallelization, Subgraphs, and Map-Reduce Trade-Offs](https://aipractitioner.substack.com/p/scaling-langgraph-agents-parallelization): `Send` based map reduce, the mechanism behind §7.5.
-- [langchain-ai/langgraph — Releases](https://github.com/langchain-ai/langgraph/releases)
-- [LangWatch](https://langwatch.ai/) and [GitHub — langwatch/langwatch](https://github.com/langwatch/langwatch)
+- [langchain-ai/langgraph, Releases](https://github.com/langchain-ai/langgraph/releases)
+- [LangWatch](https://langwatch.ai/) and [GitHub: langwatch/langwatch](https://github.com/langwatch/langwatch)
 - [LangWatch Open Sources the Missing Evaluation Layer for AI Agents](https://www.marktechpost.com/2026/03/04/langwatch-open-sources-the-missing-evaluation-layer-for-ai-agents-to-enable-end-to-end-tracing-simulation-and-systematic-testing/)
-- [GitHub — langwatch/scenario](https://github.com/langwatch/scenario) and [langwatch-scenario on PyPI](https://libraries.io/pypi/langwatch-scenario)
+- [GitHub: langwatch/scenario](https://github.com/langwatch/scenario) and [langwatch-scenario on PyPI](https://libraries.io/pypi/langwatch-scenario)
 - [How we test Agent Skills with Scenario simulations](https://langwatch.ai/blog/how-we-test-agent-skills-with-scenario-simulations): LangWatch's own dogfooding story.
-- [Introduction to Agent Testing](https://langwatch.ai/docs/agent-simulations/introduction) and [Agent Testing Framework – Scenario](https://langwatch.ai/scenario/)
+- [Introduction to Agent Testing](https://langwatch.ai/docs/agent-simulations/introduction) and [Agent Testing Framework: Scenario](https://langwatch.ai/scenario/)
 - [import-linter docs](https://import-linter.readthedocs.io/) and [PyPI](https://pypi.org/project/import-linter/): Layer 0's structural tool; layers and forbidden modules contracts, one CLI command (`lint-imports`), actively maintained (latest release June 2026).
 
 ### G. Payment systems / idempotency
 - [Understanding Idempotency: A Key to Reliable and Scalable Data Pipelines](https://airbyte.com/data-engineering-resources/idempotency-in-data-pipelines): source of the bank/duplicate transactions anecdote in §5.7.
-- [Idempotency in Payment Processing — Tap API Docs](https://developers.tap.company/docs/idempotency)
+- [Idempotency in Payment Processing, Tap API Docs](https://developers.tap.company/docs/idempotency)
 - [Property-Based Testing: Generative Testing for System Invariants](https://yrkan.com/blog/property-based-testing/)
 
 ### H. Adjacent: formal verification & smart contracts

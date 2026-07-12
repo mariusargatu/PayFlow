@@ -1,13 +1,13 @@
 PayFlow Layer 3 mutation baseline
-generated: 2026-07-02T15:37:11Z  tool: mutmut 3.6.0
+generated: 2026-07-11T22:18:26Z  tool: mutmut 3.6.0
 scope: payflow/domain, payflow/infrastructure/ledger/core.py
 
-[headline] 72.7% kill rate
-    detected 383 (killed 383 + timeout 0)  survived 144  (covered 527; rate = detected / covered)
+[headline] 73.1% kill rate
+    detected 385 (killed 385 + timeout 0)  survived 142  (covered 527; rate = detected / covered)
     no-test 44  suspicious 0  total generated 571
-    runtime 338.7s
+    runtime 146.8s
 
 [full] 73.1% kill rate
-    detected 385 (killed 383 + timeout 2)  survived 142  (covered 527; rate = detected / covered)
+    detected 385 (killed 385 + timeout 0)  survived 142  (covered 527; rate = detected / covered)
     no-test 44  suspicious 0  total generated 571
-    runtime 508.1s
+    runtime 188.4s

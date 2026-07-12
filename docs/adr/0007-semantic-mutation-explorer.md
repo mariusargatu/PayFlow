@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-03
 **Status:** Accepted. Extends the Layer 3 design (design §11) without changing the gate.
-**Revised:** 2026-07-03 — pivoted from a two source design (committed corpus + optional
+**Revised:** 2026-07-03: pivoted from a two source design (committed corpus + optional
 `--llm`) to a single LLM adversary run by default. The corpus and its drift test are removed,
 nondeterminism of the reported number is accepted, and the equivalent mutant screen below is
 added. Decisions 2 (zero authority) and 4 (cross family) are unchanged; decisions 3 and 5 are
@@ -54,7 +54,7 @@ replacement and not a gate.
    skips honestly (writes a `skipped` report, exits 0), so the keyless CI lane and the
    trust report keep working. Raw model output is not trusted directly: it is first run
    through deterministic preprocessing (drop no op / comment only mutants and exact
-   duplicates — ACH reports these are ~25% and 61% of the trivial cases respectively), and
+   duplicates: ACH reports these are ~25% and 61% of the trivial cases respectively), and
    a per run cost guard caps generation and screening.
 4. **Cross family adversary.** The adversary is Anthropic, deliberately a different model
    family than the OpenAI proposer (ADR-0002, `agent/config.py`), so it does not share the

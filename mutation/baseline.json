@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-02T15:37:11Z",
+  "generated_at": "2026-07-11T22:18:26Z",
   "tool": "mutmut 3.6.0",
   "scope": [
     "payflow/domain",
@@ -13,23 +13,8 @@
   "runs": {
     "headline": {
       "label": "headline",
-      "killed": 383,
+      "killed": 385,
       "timeout_detected": 0,
-      "detected": 383,
-      "survived": 144,
-      "no_tests": 44,
-      "suspicious": 0,
-      "skipped": 0,
-      "total": 571,
-      "covered": 527,
-      "kill_rate": 0.7268,
-      "kill_rate_pct": 72.7,
-      "runtime_seconds": 338.7
-    },
-    "full": {
-      "label": "full",
-      "killed": 383,
-      "timeout_detected": 2,
       "detected": 385,
       "survived": 142,
       "no_tests": 44,
@@ -39,7 +24,22 @@
       "covered": 527,
       "kill_rate": 0.7306,
       "kill_rate_pct": 73.1,
-      "runtime_seconds": 508.1
+      "runtime_seconds": 146.8
+    },
+    "full": {
+      "label": "full",
+      "killed": 385,
+      "timeout_detected": 0,
+      "detected": 385,
+      "survived": 142,
+      "no_tests": 44,
+      "suspicious": 0,
+      "skipped": 0,
+      "total": 571,
+      "covered": 527,
+      "kill_rate": 0.7306,
+      "kill_rate_pct": 73.1,
+      "runtime_seconds": 188.4
     }
   }
 }

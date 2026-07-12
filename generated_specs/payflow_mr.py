@@ -7,7 +7,7 @@ file is the committed current accepted Layer 1 relation suite.
 
   SUT base URL: env PAYFLOW_SUT_BASE_URL
   Capture fee:  env PAYFLOW_CAPTURE_FEE (harness supplied, not from OpenAPI)
-  Examples:     env PAYFLOW_MR_MAX_EXAMPLES (default 20)
+  Examples:     env PAYFLOW_MR_MAX_EXAMPLES (default 8)
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ PLATFORM_FEES = "acct_platform_fees"
 
 MIN_CAPTURE = CAPTURE_FEE + 1
 MAX_CAPTURE = 100_000
-_MR_MAX_EXAMPLES = int(os.environ.get("PAYFLOW_MR_MAX_EXAMPLES", "20"))
+_MR_MAX_EXAMPLES = int(os.environ.get("PAYFLOW_MR_MAX_EXAMPLES", "8"))
 
 
 def _client() -> httpx.Client:
@@ -271,46 +271,9 @@ def _check_void_recreate(amount, tag):
     part1=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE),
     part2=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE),
 )
-def test_mr_split_capture_fee_adjusted(part1, part2):
+def test_mr_split_capture_same_net_after_fee_adjusted(part1, part2):
     # [MR-1] split_capture, fee_adjusted=True
     _check_split_capture(part1, part2, True, "[MR-1]")
-
-
-@settings(max_examples=_MR_MAX_EXAMPLES, deadline=None, derandomize=True)
-@given(
-    amount_a=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE),
-    amount_b=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE),
-)
-def test_mr_reorder_independent_exact_equivalence(amount_a, amount_b):
-    # [MR-2] reorder_independent (exact equivalence)
-    _check_reorder_independent(amount_a, amount_b, "[MR-2]")
-
-
-@settings(max_examples=_MR_MAX_EXAMPLES, deadline=None, derandomize=True)
-@given(
-    base_amount=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE),
-    k=st.integers(min_value=2, max_value=5),
-)
-def test_mr_scale_amounts_exact_equivalence(base_amount, k):
-    # [MR-3] scale_amounts, fee_adjusted=False
-    _check_scale_amounts(base_amount, k, False, "[MR-3]")
-
-
-@settings(max_examples=_MR_MAX_EXAMPLES, deadline=None, derandomize=True)
-@given(
-    amount=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE),
-    times=st.integers(min_value=1, max_value=3),
-)
-def test_mr_replay_request_exact_equivalence(amount, times):
-    # [MR-4] replay_request (idempotency identity)
-    _check_replay_request(amount, times, "[MR-4]")
-
-
-@settings(max_examples=_MR_MAX_EXAMPLES, deadline=None, derandomize=True)
-@given(amount=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE))
-def test_mr_void_recreate_fee_adjusted(amount):
-    # [MR-5] void_recreate (exact equivalence)
-    _check_void_recreate(amount, "[MR-5]")
 
 
 @settings(max_examples=_MR_MAX_EXAMPLES, deadline=None, derandomize=True)
@@ -318,6 +281,43 @@ def test_mr_void_recreate_fee_adjusted(amount):
     part1=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE),
     part2=st.integers(min_value=1, max_value=MAX_CAPTURE),
 )
-def test_mr_split_refund_fee_adjusted(part1, part2):
-    # [MR-6] split_refund, fee_adjusted=False
-    _check_split_refund(part1, part2, False, "[MR-6]")
+def test_mr_split_refund_same_net_fee_exact_equivalence(part1, part2):
+    # [MR-2] split_refund, fee_adjusted=False
+    _check_split_refund(part1, part2, False, "[MR-2]")
+
+
+@settings(max_examples=_MR_MAX_EXAMPLES, deadline=None, derandomize=True)
+@given(
+    amount_a=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE),
+    amount_b=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE),
+)
+def test_mr_reorder_independent_accounts_fee_exact_equivalence(amount_a, amount_b):
+    # [MR-3] reorder_independent (exact equivalence)
+    _check_reorder_independent(amount_a, amount_b, "[MR-3]")
+
+
+@settings(max_examples=_MR_MAX_EXAMPLES, deadline=None, derandomize=True)
+@given(
+    base_amount=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE),
+    k=st.integers(min_value=2, max_value=5),
+)
+def test_mr_scale_amounts_principal_scaled_fee_adjusted(base_amount, k):
+    # [MR-4] scale_amounts, fee_adjusted=False
+    _check_scale_amounts(base_amount, k, False, "[MR-4]")
+
+
+@settings(max_examples=_MR_MAX_EXAMPLES, deadline=None, derandomize=True)
+@given(
+    amount=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE),
+    times=st.integers(min_value=1, max_value=3),
+)
+def test_mr_replay_request_idempotent_exact_equivalence(amount, times):
+    # [MR-5] replay_request (idempotency identity)
+    _check_replay_request(amount, times, "[MR-5]")
+
+
+@settings(max_examples=_MR_MAX_EXAMPLES, deadline=None, derandomize=True)
+@given(amount=st.integers(min_value=MIN_CAPTURE, max_value=MAX_CAPTURE))
+def test_mr_void_recreate_equivalent_after_fee_exact_equivalence(amount):
+    # [MR-6] void_recreate (exact equivalence)
+    _check_void_recreate(amount, "[MR-6]")

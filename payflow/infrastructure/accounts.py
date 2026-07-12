@@ -18,13 +18,11 @@ def insert(
     id: str,
     name: str,
     type: str,
-    allow_negative: int,
     created_at: str,
 ) -> None:
     conn.execute(
-        "INSERT INTO accounts (id, name, type, allow_negative, created_at) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (id, name, type, allow_negative, created_at),
+        "INSERT INTO accounts (id, name, type, created_at) VALUES (?, ?, ?, ?)",
+        (id, name, type, created_at),
     )
 
 
@@ -34,11 +32,9 @@ def insert_if_absent(
     id: str,
     name: str,
     type: str,
-    allow_negative: int,
     created_at: str,
 ) -> None:
     conn.execute(
-        "INSERT OR IGNORE INTO accounts (id, name, type, allow_negative, created_at) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (id, name, type, allow_negative, created_at),
+        "INSERT OR IGNORE INTO accounts (id, name, type, created_at) VALUES (?, ?, ?, ?)",
+        (id, name, type, created_at),
     )

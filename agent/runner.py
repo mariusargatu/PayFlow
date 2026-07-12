@@ -178,7 +178,7 @@ def _invoke_with_view(app, initial: dict, thread: dict, deps, run_dir: str) -> N
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="PayFlow property generation agent")
-    parser.add_argument("--bug", choices=["fm_a", "fm_b", "fm_c"], default=None)
+    parser.add_argument("--bug", choices=["fm_a", "fm_c"], default=None)
     parser.add_argument("--run-dir", default=None)
     parser.add_argument("--view", action="store_true", help="live TUI of the pipeline as it runs")
     args = parser.parse_args()

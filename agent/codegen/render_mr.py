@@ -372,7 +372,13 @@ def _func_name(relation: MetamorphicRelation, used: set[str]) -> str:
 def _relation_block(relation: MetamorphicRelation, used: set[str]) -> str:
     template = _TEST_TEMPLATES.get(relation.transform)
     if template is None:
-        return ""
+        # See render._invariant_block: a transform with no template would render to
+        # nothing and pass vacuously. Fail loudly; tests/drift/test_vocabulary_coupling
+        # keeps this map in lockstep with schemas.TransformKind.
+        raise ValueError(
+            f"no render template for transform {relation.transform!r}; a new TransformKind "
+            "must ship with its template in _TEST_TEMPLATES (and a plain-English label)"
+        )
     fee = relation.fee_handling == "fee_adjusted"
     return "\n\n" + template.format(
         func=_func_name(relation, used), id=relation.id, fee=fee
