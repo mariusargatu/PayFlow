@@ -11,5 +11,6 @@ These must hold after every request, under any request sequence. The verificatio
 | INV-5 | State changes only along the state machine table; nothing is reachable from `VOIDED` or `REFUNDED` |
 | INV-6 | The state machine preconditions are enforced: an illegal operation returns `409` and changes nothing, no state change, no ledger entries |
 | INV-7 | Every intent in state `AUTHORIZED` or beyond has at least one ledger entry pair carrying its `payment_intent_id` |
+| INV-8 | (demo) The sum of a merchant's captured amounts never exceeds its lifetime authorized total |
 
 The catalog of metamorphic relations (MR-1 and following) that exercise these invariants lives in `docs/design.md` §5.6; it is not duplicated here.
