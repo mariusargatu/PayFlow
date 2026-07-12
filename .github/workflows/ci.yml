@@ -1,10 +1,10 @@
 name: verify
 
-# The PR/commit gate (design §10): Layer 0 plus the Layer 1 replay slice, all
-# keyless and deterministic, targeting under three minutes. This is replay, not
-# discovery: it checks PayFlow against the already accepted agent authored spec,
-# it never re-runs the property generation agent (that is the nightly lane, which
-# needs an API budget). No secrets are referenced here by design.
+# The PR/commit gate (design section 10): Layer 0 plus the Layer 1 replay slice,
+# keyless and deterministic. Each gate is its own matrix check (fail-fast off) so
+# every gate runs and a red run shows exactly which gate caught the fault on the PR
+# itself, without opening the run. A final report job renders the full pass/fail
+# matrix into the job summary and uploads it as an artifact. No secrets by design.
 
 on:
   pull_request:
@@ -16,8 +16,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  gate:
+    name: ${{ matrix.gate.name }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        gate:
+          - name: "Layer 0: import contracts"
+            run: uv run lint-imports
+          - name: "Drift: state machine diagram"
+            run: uv run pytest tests/drift/test_state_machine_diagram.py -q
+          - name: "Drift: agent graph diagram"
+            run: uv run pytest tests/drift/test_agent_graph_diagram.py -q
+          - name: "Drift: importlinter snapshot"
+            run: uv run pytest tests/drift/test_importlinter_contracts.py -q
+          - name: "Drift: node roles (propose vs dispose)"
+            run: uv run pytest tests/drift/test_node_roles.py -q
+          - name: "Drift: spec coverage (the gate on the gate)"
+            run: uv run pytest tests/drift/test_spec_coverage.py -q
+          - name: "Drift: public numbers"
+            run: uv run pytest tests/drift/test_public_numbers.py -q
+          - name: "Drift: workflow scripts"
+            run: uv run pytest tests/drift/test_workflow_scripts.py -q
+          - name: "Drift: vocabulary coupling"
+            run: uv run pytest tests/drift/test_vocabulary_coupling.py -q
+          - name: "Layer 1: property sanity and concurrency A"
+            run: 'uv run pytest tests/property "tests/concurrency/test_idempotent_replay.py::test_replay_correct_build_single_effect" -q'
+          - name: "Layer 1: agent discovered replay"
+            run: uv run pytest mutation/replay/test_agent_replay.py -q
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies (keyless)
+        run: uv sync
+
+      - name: Run the gate
+        run: ${{ matrix.gate.run }}
+
+  report:
+    name: pipeline report
+    runs-on: ubuntu-latest
+    needs: [gate]
+    if: always()
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -30,33 +77,14 @@ jobs:
       - name: Sync dependencies (keyless)
         run: uv sync
 
-      - name: Layer 0 - import contracts
-        run: uv run lint-imports
-
-      - name: Drift gates - diagrams and contracts cannot lie
-        run: uv run pytest tests/drift -q
-
-      - name: Layer 1 - property sanity machine + concurrency A
-        run: >-
-          uv run pytest tests/property
-          "tests/concurrency/test_idempotent_replay.py::test_replay_correct_build_single_effect"
-          -q
-
-      - name: Layer 1 - agent discovered specs replay (in process, offline)
-        run: uv run pytest mutation/replay/test_agent_replay.py -q
-
-      # Soft assertion report: runs every check regardless of earlier failures (CI
-      # is bash -e, so the steps above stop at the first red). This renders the full
-      # pass/fail matrix into the run's job summary and uploads it as an artifact, so
-      # a red run still shows exactly which check localized the fault.
-      - name: Pipeline report (soft, runs even if a gate failed)
-        if: always()
+      # Soft assertions: every check runs regardless of the gate matrix above, so
+      # the artifact and summary always carry the full pass/fail matrix.
+      - name: Pipeline report (soft, every check)
         run: |
           uv run showcase --report showcase-report || true
           cat showcase-report/showcase-report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload pipeline report artifact
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-report
