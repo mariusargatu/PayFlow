@@ -101,6 +101,7 @@ Requires Python 3.12 or newer and [uv](https://docs.astral.sh/uv/).
 uv sync                 # install deps
 uv run demo             # the blocking checks, one colored screen (all green)
 uv run catch            # the payoff: seed three bugs, watch a check catch each in red
+uv run showcase all     # the whole pipeline as one soft matrix, plus each fault localized to its check
 uv run pytest tests/    # the full replay slice
 uv run build-report     # regenerate the trust report folded into site/index.html
 ```

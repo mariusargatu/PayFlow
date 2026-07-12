@@ -27,6 +27,7 @@ uv run uvicorn payflow.api.app:app   # serve the API (/openapi.json)
 uv run pytest tests/                 # Layer 1 sanity + concurrency + drift gates
 uv run demo                          # run the fast gates, one screen colored summary
 uv run catch                         # seed each deliberate bug and watch its layer catch it in red, then restore a clean tree (keyless)
+uv run showcase [scenario]           # run the WHOLE verify pipeline as one soft-assertion matrix; `spec-change`/`fm_b`/`all` seed a fault and show which check localizes it; `--report DIR` writes json + md artifacts (keyless)
 
 # Phase 2 + 3 (works now):
 uv run agent-run                     # discovery agent vs correct PayFlow: discovers rules, invariants AND metamorphic relations (renders generated_specs/payflow_spec.py + payflow_mr.py). COSTS OPENAI TOKENS (~$0.01/run); needs OPENAI_API_KEY in .env, else it prints a message and skips (no failure). Add --view for a live Rich TUI of the pipeline.
